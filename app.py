@@ -20,7 +20,6 @@ def init_files():
         ]).to_csv(CSV_FILE, index=False)
     else:
         df = pd.read_csv(CSV_FILE)
-        # Add 'receipt_number' column if it doesn't exist
         if 'receipt_number' not in df.columns:
             df['receipt_number'] = ''
             df.to_csv(CSV_FILE, index=False)
@@ -113,7 +112,7 @@ def init_state():
         'selected_transaction_type': 'Paid to Me',
         'payment_method': 'cash',
         'editing_row_idx': None,
-        'selected_person': "Select..." # Default value for the selectbox
+        'selected_person': "Select..."
     }
     for k in keys:
         if k not in st.session_state:
@@ -121,32 +120,26 @@ def init_state():
 
 init_state()
 
-# Function to reset session state for elements not cleared by form
 def reset_form_session_state_for_add_transaction():
     st.session_state['selected_transaction_type'] = 'Paid to Me'
     st.session_state['payment_method'] = 'cash'
-    st.session_state['selected_person'] = "Select..." # Reset the selected person to default
-    st.session_state['editing_row_idx'] = None # Ensure editing mode is off
+    st.session_state['selected_person'] = "Select..."
+    st.session_state['editing_row_idx'] = None
 
 tab1, tab2, tab3 = st.tabs(["Add Transaction", "View Transactions", "Manage People"])
 
 # ------------------ Tab 1: Add Transaction ------------------
 with tab1:
     st.subheader("Add New Transaction")
-
-    # Transaction Type selection outside the form for immediate reactivity
     st.session_state['selected_transaction_type'] = st.radio(
         "Transaction Type", ["Paid to Me", "I Paid"], horizontal=True,
         key='selected_transaction_type_radio'
     )
-
-    # Payment Method selection outside the form for immediate reactivity
     st.session_state['payment_method'] = st.radio(
         "Payment Method", ["cash", "cheque"], horizontal=True,
         key='payment_method_radio'
     )
 
-    # Filter people based on the selected transaction type
     try:
         people_df = pd.read_csv(PEOPLE_FILE)
         category = 'investor' if st.session_state['selected_transaction_type'] == "Paid to Me" else 'client'
@@ -156,13 +149,12 @@ with tab1:
 
     person_options = ["Select..."] + sorted(filtered_people)
     
-    # Ensure selected_person is a valid option or default to "Select..."
     if st.session_state['selected_person'] not in person_options:
         st.session_state['selected_person'] = "Select..."
 
     current_person_index = person_options.index(st.session_state['selected_person'])
 
-    with st.form("transaction_form", clear_on_submit=True): # clear_on_submit handles resetting form fields
+    with st.form("transaction_form", clear_on_submit=True):
         col1, col2 = st.columns(2)
         with col1:
             amount = st.number_input("Amount (Rs.)", min_value=0.0, format="%.2f")
@@ -182,12 +174,10 @@ with tab1:
                 )
 
         with col2:
-            # st.session_state['selected_person'] is managed by this selectbox
             st.session_state['selected_person'] = st.selectbox(
                 "Select Person", person_options, index=current_person_index, key='selected_person_dropdown'
             )
             if st.session_state['selected_person'] == "Select...":
-                # If "Select..." is chosen, ensure the stored value is None for logic
                 st.session_state['selected_person'] = None
 
             status = st.selectbox("Transaction Status", ["completed", "pending"])
@@ -197,6 +187,8 @@ with tab1:
         if submitted:
             if not st.session_state['selected_person']:
                 st.warning("Please select a valid person.")
+            elif amount <= 0:
+                st.warning("Amount must be greater than 0.")
             elif st.session_state['payment_method'] == "cash" and not receipt_number:
                 st.warning("Receipt Number is required for cash payments.")
             elif st.session_state['payment_method'] == "cheque" and not cheque_number:
@@ -225,20 +217,41 @@ with tab1:
 # ------------------ Tab 2: View Transactions ------------------
 with tab2:
     st.subheader("Transaction History")
-    view_filter = st.radio("Filter by Type", ["All", "Received", "Paid"], horizontal=True, key='view_filter')
-    method_filter = st.selectbox("Payment Method", ["All", "Cash", "Cheque"], key='method_filter')
-    status_filter = st.selectbox("Status", ["All", "Completed", "Pending", "Received/Given", "Processing", "Bounced", "Processing Done"], key='status_filter')
-
+    
     try:
         df = pd.read_csv(CSV_FILE)
-        df['amount'] = df['amount'].astype(float)
+        
+        # Check if DataFrame is empty
+        if df.empty:
+            st.info("No transactions recorded yet.")
+            st.stop()
+            
+        # Ensure required columns exist
+        required_columns = ['date', 'person', 'amount', 'type', 'payment_method',
+                           'transaction_status', 'cheque_status', 'description']
+        
+        missing_cols = [col for col in required_columns if col not in df.columns]
+        if missing_cols:
+            st.error(f"Missing required columns in data: {', '.join(missing_cols)}")
+            st.stop()
+            
+        # Convert amount to float and handle missing values
+        df['amount'] = pd.to_numeric(df['amount'], errors='coerce').fillna(0.0)
         df['amount_display'] = df['amount'].apply(lambda x: f"Rs. {x:,.2f}")
         df['type_display'] = df['type'].map({'paid_to_me': 'Received', 'i_paid': 'Paid'})
-        
         df['original_index'] = df.index
+        
+        # Filters
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            view_filter = st.radio("Filter by Type", ["All", "Received", "Paid"], horizontal=True)
+        with col2:
+            method_filter = st.selectbox("Payment Method", ["All", "Cash", "Cheque"])
+        with col3:
+            status_filter = st.selectbox("Status", ["All", "Completed", "Pending", "Received/Given", "Processing", "Bounced", "Processing Done"])
 
+        # Apply filters
         filtered_df = df.copy()
-
         if view_filter != "All":
             filtered_df = filtered_df[filtered_df['type_display'] == view_filter]
         if method_filter != "All":
@@ -249,70 +262,129 @@ with tab2:
             else:
                 filtered_df = filtered_df[filtered_df['cheque_status'].str.lower() == status_filter.lower()]
 
-        st.dataframe(filtered_df[[
-            'date', 'person', 'amount_display', 'type_display', 'payment_method',
-            'cheque_number', 'receipt_number', 'transaction_status', 'cheque_status', 'description', 'original_index'
-        ]].rename(columns={
-            'date': 'Date', 'person': 'Person', 'amount_display': 'Amount',
-            'type_display': 'Type', 'payment_method': 'Method', 'cheque_number': 'Cheque No.',
-            'receipt_number': 'Receipt No.', 'transaction_status': 'Status',
-            'cheque_status': 'Cheque Status', 'description': 'Description',
-            'original_index': 'Edit'
-        }), use_container_width=True, hide_index=True,
-        column_config={
-            "Edit": st.column_config.ButtonColumn(
-                "Edit",
-                help="Click to edit transaction",
-                key="edit_button_col"
-            )
-        })
+        # Display DataFrame with clearer column names
+        display_columns = {
+            'original_index': 'ID',
+            'date': 'Date',
+            'person': 'Person',
+            'amount_display': 'Amount',
+            'type_display': 'Type',
+            'payment_method': 'Method',
+            'cheque_number': 'Cheque No.',
+            'receipt_number': 'Receipt No.',
+            'transaction_status': 'Status',
+            'cheque_status': 'Cheque Status',
+            'description': 'Description'
+        }
+        
+        st.dataframe(
+            filtered_df[list(display_columns.keys())].rename(columns=display_columns),
+            use_container_width=True,
+            hide_index=True
+        )
 
-        if st.session_state.get('edit_button_col') is not None:
-            edited_row_index = st.session_state['edit_button_col']
-
-            st.session_state['editing_row_idx'] = filtered_df.iloc[edited_row_index]['original_index']
-            st.session_state['temp_edit_data'] = df.loc[st.session_state['editing_row_idx']].to_dict()
-            st.rerun()
-
-        if st.session_state['editing_row_idx'] is not None and st.session_state.get('temp_edit_data'):
+        # Edit Section - More visible with a clear header
+        if not filtered_df.empty:
+            st.markdown("---")
             st.subheader("Edit Transaction")
+            
+            edit_options = [f"ID: {idx} - {row['date']} - {row['person']} - Rs.{row['amount']:,.2f}" 
+                           for idx, row in filtered_df.iterrows()]
+            
+            selected_edit_option = st.selectbox(
+                "Select transaction to edit:", 
+                ["Select a transaction"] + edit_options,
+                key='select_edit_transaction'
+            )
+            
+            if selected_edit_option != "Select a transaction":
+                selected_original_index = int(selected_edit_option.split(' - ')[0].replace('ID: ', ''))
+                
+                if st.button("Edit Selected Transaction", key='edit_button'):
+                    st.session_state['editing_row_idx'] = selected_original_index
+                    st.session_state['temp_edit_data'] = df.loc[st.session_state['editing_row_idx']].to_dict()
+                    st.rerun()
+
+        # Edit Form (appears when editing_row_idx is set)
+        if st.session_state['editing_row_idx'] is not None and st.session_state.get('temp_edit_data'):
+            st.markdown("---")
+            st.subheader("Edit Transaction Details")
             edit_data = st.session_state['temp_edit_data']
             
             with st.form("edit_transaction_form"):
                 col1_edit, col2_edit = st.columns(2)
                 with col1_edit:
                     edited_amount = st.number_input("Amount (Rs.)", value=float(edit_data.get('amount', 0.0)), format="%.2f", key='edit_amount')
-                    edited_date = st.date_input("Date", value=datetime.strptime(edit_data['date'], "%Y-%m-%d").date(), key='edit_date')
-                    edited_payment_method = st.radio("Payment Method", ["cash", "cheque"], horizontal=True, key='edit_payment_method', index=["cash", "cheque"].index(edit_data.get('payment_method', 'cash')))
+                    
+                    try:
+                        default_date_value = datetime.strptime(edit_data.get('date', ''), "%Y-%m-%d").date()
+                    except:
+                        default_date_value = datetime.now().date()
+                    edited_date = st.date_input("Date", value=default_date_value, key='edit_date')
+
+                    edited_payment_method = st.radio(
+                        "Payment Method", 
+                        ["cash", "cheque"], 
+                        horizontal=True, 
+                        index=["cash", "cheque"].index(edit_data.get('payment_method', 'cash')),
+                        key='edit_payment_method'
+                    )
 
                     edited_receipt_number = ""
                     edited_cheque_number = ""
                     edited_cheque_status = ""
 
                     if edited_payment_method == "cash":
-                        edited_receipt_number = st.text_input("Receipt Number", value=edit_data.get('receipt_number', ''), key='edit_receipt_number')
+                        edited_receipt_number = st.text_input(
+                            "Receipt Number", 
+                            value=edit_data.get('receipt_number', ''), 
+                            key='edit_receipt_number'
+                        )
                     elif edited_payment_method == "cheque":
-                        edited_cheque_number = st.text_input("Cheque Number", value=edit_data.get('cheque_number', ''), key='edit_cheque_number')
+                        edited_cheque_number = st.text_input(
+                            "Cheque Number", 
+                            value=edit_data.get('cheque_number', ''), 
+                            key='edit_cheque_number'
+                        )
                         edited_cheque_status = st.selectbox(
                             "Cheque Status",
                             ["received/given", "processing", "bounced", "processing done"],
-                            index=["received/given", "processing", "bounced", "processing done"].index(edit_data.get('cheque_status', 'processing')),
+                            index=["received/given", "processing", "bounced", "processing done"].index(
+                                edit_data.get('cheque_status', 'processing')
+                            ),
                             key='edit_cheque_status'
                         )
                 
                 with col2_edit:
-                    edited_person = st.selectbox("Select Person", people_df['name'].tolist(), index=people_df['name'].tolist().index(edit_data['person']), key='edit_person')
-                    edited_transaction_status = st.selectbox("Transaction Status", ["completed", "pending"], index=["completed", "pending"].index(edit_data.get('transaction_status', 'completed')), key='edit_transaction_status')
-                    edited_description = st.text_input("Description", value=edit_data.get('description', ''), key='edit_description')
+                    people_df = pd.read_csv(PEOPLE_FILE)
+                    edited_person = st.selectbox(
+                        "Select Person", 
+                        people_df['name'].tolist(), 
+                        index=people_df['name'].tolist().index(edit_data['person']), 
+                        key='edit_person'
+                    )
+                    edited_transaction_status = st.selectbox(
+                        "Transaction Status", 
+                        ["completed", "pending"], 
+                        index=["completed", "pending"].index(edit_data.get('transaction_status', 'completed')), 
+                        key='edit_transaction_status'
+                    )
+                    edited_description = st.text_input(
+                        "Description", 
+                        value=edit_data.get('description', ''), 
+                        key='edit_description'
+                    )
 
                 col_buttons = st.columns(2)
                 with col_buttons[0]:
-                    save_edited = st.form_submit_button("Save Changes")
+                    save_edited = st.form_submit_button("💾 Save Changes")
                 with col_buttons[1]:
-                    cancel_edit = st.form_submit_button("Cancel")
+                    cancel_edit = st.form_submit_button("❌ Cancel")
 
                 if save_edited:
-                    if edited_payment_method == "cash" and not edited_receipt_number:
+                    if edited_amount <= 0:
+                        st.warning("Amount must be greater than 0.")
+                    elif edited_payment_method == "cash" and not edited_receipt_number:
                         st.warning("Receipt Number is required for cash payments.")
                     elif edited_payment_method == "cheque" and not edited_cheque_number:
                         st.warning("Cheque Number is required for cheque payments.")
@@ -333,7 +405,7 @@ with tab2:
                         df.to_csv(CSV_FILE, index=False)
                         generate_html_summary(df)
                         git_push()
-                        st.success("Transaction updated successfully.")
+                        st.success("✅ Transaction updated successfully!")
                         st.session_state['editing_row_idx'] = None
                         st.session_state['temp_edit_data'] = {}
                         st.rerun()
@@ -343,7 +415,8 @@ with tab2:
                     st.rerun()
 
     except Exception as e:
-        st.error(f"Error loading history: {e}")
+        st.error(f"Error loading transaction history: {str(e)}")
+        st.stop()
 
 # ------------------ Tab 3: Manage People ------------------
 with tab3:
@@ -368,17 +441,20 @@ with tab3:
 
     try:
         ppl = pd.read_csv(PEOPLE_FILE)
-        st.dataframe(ppl, use_container_width=True, hide_index=True)
-        to_del = st.selectbox("Delete Person", ppl['name'] if not ppl.empty else [])
-        if st.button("Delete"):
-            tx = pd.read_csv(CSV_FILE)
-            if to_del in tx['person'].values:
-                st.error("Cannot delete person with transactions.")
-            else:
-                ppl = ppl[ppl['name'] != to_del]
-                ppl.to_csv(PEOPLE_FILE, index=False)
-                st.success("Deleted.")
-                st.rerun()
+        if not ppl.empty:
+            st.dataframe(ppl, use_container_width=True, hide_index=True)
+            to_del = st.selectbox("Delete Person", ppl['name'])
+            if st.button("Delete"):
+                tx = pd.read_csv(CSV_FILE)
+                if to_del in tx['person'].values:
+                    st.error("Cannot delete person with transactions.")
+                else:
+                    ppl = ppl[ppl['name'] != to_del]
+                    ppl.to_csv(PEOPLE_FILE, index=False)
+                    st.success("Deleted.")
+                    st.rerun()
+        else:
+            st.info("No people records yet.")
     except Exception as e:
         st.error(f"Error managing people: {e}")
 
@@ -386,24 +462,27 @@ with tab3:
 st.sidebar.header("Current Balances")
 try:
     df_bal = pd.read_csv(CSV_FILE)
-    df_bal['amount'] = df_bal['amount'].astype(float)
-    rec = df_bal[df_bal['type'] == 'paid_to_me']['amount'].sum()
-    paid = df_bal[df_bal['type'] == 'i_paid']['amount'].sum()
-    cash_rec = df_bal[(df_bal['type'] == 'paid_to_me') & (df_bal['payment_method'] == 'cash')]['amount'].sum()
-    cheque_rec = df_bal[(df_bal['type'] == 'paid_to_me') & (df_bal['payment_method'] == 'cheque')]['amount'].sum()
-    cash_paid = df_bal[(df_bal['type'] == 'i_paid') & (df_bal['payment_method'] == 'cash')]['amount'].sum()
-    cheque_paid = df_bal[(df_bal['type'] == 'i_paid') & (df_bal['payment_method'] == 'cheque')]['amount'].sum()
+    if not df_bal.empty:
+        df_bal['amount'] = pd.to_numeric(df_bal['amount'], errors='coerce').fillna(0.0)
+        rec = df_bal[df_bal['type'] == 'paid_to_me']['amount'].sum()
+        paid = df_bal[df_bal['type'] == 'i_paid']['amount'].sum()
+        cash_rec = df_bal[(df_bal['type'] == 'paid_to_me') & (df_bal['payment_method'] == 'cash')]['amount'].sum()
+        cheque_rec = df_bal[(df_bal['type'] == 'paid_to_me') & (df_bal['payment_method'] == 'cheque')]['amount'].sum()
+        cash_paid = df_bal[(df_bal['type'] == 'i_paid') & (df_bal['payment_method'] == 'cash')]['amount'].sum()
+        cheque_paid = df_bal[(df_bal['type'] == 'i_paid') & (df_bal['payment_method'] == 'cheque')]['amount'].sum()
 
-    st.sidebar.metric("Total Received", f"Rs. {rec:,.2f}")
-    st.sidebar.metric("Total Paid", f"Rs. {paid:,.2f}")
-    st.sidebar.metric("Net Balance", f"Rs. {rec - paid:,.2f}", delta_color="inverse")
+        st.sidebar.metric("Total Received", f"Rs. {rec:,.2f}")
+        st.sidebar.metric("Total Paid", f"Rs. {paid:,.2f}")
+        st.sidebar.metric("Net Balance", f"Rs. {rec - paid:,.2f}", delta_color="inverse")
 
-    with st.sidebar.expander("Payment Methods"):
-        st.write("**Received**")
-        st.write(f"Cash: Rs. {cash_rec:,.2f}")
-        st.write(f"Cheque: Rs. {cheque_rec:,.2f}")
-        st.write("**Paid**")
-        st.write(f"Cash: Rs. {cash_paid:,.2f}")
-        st.write(f"Cheque: Rs. {cheque_paid:,.2f}")
+        with st.sidebar.expander("Payment Methods"):
+            st.write("**Received**")
+            st.write(f"Cash: Rs. {cash_rec:,.2f}")
+            st.write(f"Cheque: Rs. {cheque_rec:,.2f}")
+            st.write("**Paid**")
+            st.write(f"Cash: Rs. {cash_paid:,.2f}")
+            st.write(f"Cheque: Rs. {cheque_paid:,.2f}")
+    else:
+        st.sidebar.info("No transactions yet.")
 except Exception as e:
-    st.sidebar.info("No transactions yet.")
+    st.sidebar.error(f"Error loading balances: {str(e)}")
