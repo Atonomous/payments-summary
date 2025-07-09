@@ -126,11 +126,22 @@ st.title("💰 Payment Tracker")
 tab1, tab2, tab3 = st.tabs(["Add Transaction", "View Transactions", "Manage People"])
 
 with tab1:
+    # Initialize session state for transaction type
+    if 'transaction_type' not in st.session_state:
+        st.session_state.transaction_type = "Paid to Me"
+    
     with st.form("payment_form", clear_on_submit=True):
         col1, col2 = st.columns(2)
         
         with col1:
-            transaction_type = st.radio("Transaction Type", ["Paid to Me", "I Paid"], horizontal=True)
+            # Use session state to maintain selection
+            transaction_type = st.radio(
+                "Transaction Type", 
+                ["Paid to Me", "I Paid"], 
+                horizontal=True,
+                index=0 if st.session_state.transaction_type == "Paid to Me" else 1,
+                key="transaction_type_radio"
+            )
             amount = st.number_input("Amount (Rs.)", min_value=0.0, step=0.01, format="%.2f")
             date = st.date_input("Date", datetime.now())
             
@@ -143,18 +154,26 @@ with tab1:
                 
                 if transaction_type == "Paid to Me":
                     filtered_people = people_df[people_df['category'] == 'investor']['name'].tolist()
+                    placeholder = "Select investor"
                 else:
                     filtered_people = people_df[people_df['category'] == 'client']['name'].tolist()
+                    placeholder = "Select client"
                 
-                if not filtered_people:
-                    st.warning(f"No {'investors' if transaction_type == 'Paid to Me' else 'clients'} found")
-                    filtered_people = people_df['name'].tolist()
+                # Maintain person selection in session state
+                if 'selected_person' not in st.session_state:
+                    st.session_state.selected_person = filtered_people[0] if filtered_people else None
                 
                 person = st.selectbox(
-                    f"Select {'Investor' if transaction_type == 'Paid to Me' else 'Client'}",
+                    "Person",
                     options=filtered_people,
-                    index=0 if filtered_people else None
+                    index=0 if filtered_people else None,
+                    placeholder=placeholder,
+                    key="person_select"
                 )
+                
+                # Update session state
+                if person:
+                    st.session_state.selected_person = person
                 
             except Exception as e:
                 st.error(f"Error loading people: {str(e)}")
@@ -181,6 +200,8 @@ with tab1:
                     new_entry.to_csv(CSV_FILE, mode='a', header=False, index=False)
                     st.success("Transaction added successfully!")
                     generate_summary()
+                    # Force rerun to maintain UI state
+                    st.rerun()
                 except Exception as e:
                     st.error(f"Error adding transaction: {str(e)}")
 
