@@ -155,124 +155,107 @@ tab1, tab2, tab3 = st.tabs(["Add Transaction", "View Transactions", "Manage Peop
 
 with tab1:
     st.subheader("Add New Transaction")
-    # Removed clear_on_submit=True to manually control form clearing
-    with st.form("payment_form"): 
+
+    # Move transaction type selection outside form so it can update UI dynamically
+    previous_type = st.session_state.get('selected_transaction_type', "Paid to Me")
+    transaction_type = st.radio(
+        "Transaction Type", 
+        ["Paid to Me", "I Paid"], 
+        horizontal=True,
+        index=["Paid to Me", "I Paid"].index(previous_type),
+        key="transaction_type_selector"
+    )
+
+    # Reset selected person if transaction type changes
+    if transaction_type != previous_type:
+        st.session_state['selected_person'] = None
+        st.session_state['selected_transaction_type'] = transaction_type
+        st.rerun()
+
+    # Load people and filter based on transaction type
+    try:
+        people_df = pd.read_csv(PEOPLE_FILE)
+        people_df['category'] = people_df['category'].astype(str).str.strip().str.lower()
+    except Exception as e:
+        st.error(f"Error loading people data: {str(e)}")
+        people_df = pd.DataFrame(columns=["name", "category"])
+
+    filtered_people = []
+    if not people_df.empty:
+        category = 'investor' if transaction_type == "Paid to Me" else 'client'
+        filtered_people = people_df[people_df['category'] == category]['name'].tolist()
+
+    display_options = ["Select a person..."] + filtered_people
+    initial_person_index = 0
+    if st.session_state['selected_person'] in filtered_people:
+        initial_person_index = filtered_people.index(st.session_state['selected_person']) + 1
+
+    # Start the form after radio and person filtering
+    with st.form("payment_form"):
         col1, col2 = st.columns(2)
-        
+
         with col1:
-            # Store the current transaction type from session state before rendering the radio
-            current_transaction_type_from_radio = st.session_state['selected_transaction_type']
-
-            # Radio button for transaction type, linked to session state
-            transaction_type = st.radio(
-                "Transaction Type", 
-                ["Paid to Me", "I Paid"], 
-                horizontal=True, 
-                key='transaction_type_radio' # Linked to session state
-                # Removed on_change callback here to avoid StreamlitInvalidFormCallbackError
-            )
-            # Update session state with the current radio selection
-            st.session_state['selected_transaction_type'] = transaction_type
-
-            # Check if the transaction type has changed since the last run
-            # If it has, reset the selected person to avoid incorrect pre-selection
-            if transaction_type != current_transaction_type_from_radio:
-                st.session_state['selected_person'] = None
-
-            # Number input for amount, linked to session state
             amount = st.number_input(
                 "Amount (Rs.)", 
                 min_value=0.0, 
                 step=0.01, 
                 format="%.2f", 
-                key='amount_input' # Linked to session state
+                key='amount_input'
             )
-            
-            # Date input, linked to session state
+
             date = st.date_input(
                 "Date", 
-                value=st.session_state['date_input'], # Use value from session state
-                key='date_input' # Linked to session state
+                value=st.session_state['date_input'],
+                key='date_input'
             )
-            
-        with col2:
-            people_df = pd.DataFrame(columns=["name", "category"]) # Default empty DataFrame for safety
-            try:
-                people_df = pd.read_csv(PEOPLE_FILE)
-                # Ensure category column is treated as string and cleaned
-                people_df['category'] = people_df['category'].astype(str).str.strip().str.lower()
-            except Exception as e:
-                st.error(f"Error loading people data: {str(e)}")
 
-            filtered_people = []
-            if not people_df.empty:
-                if st.session_state['selected_transaction_type'] == "Paid to Me":
-                    filtered_people = people_df[people_df['category'] == 'investor']['name'].tolist()
-                else:
-                    filtered_people = people_df[people_df['category'] == 'client']['name'].tolist()
-            
-            # Add a "Select a person" placeholder option
-            display_options = ["Select a person..."] + filtered_people
-            
-            # Determine the initial index for the selectbox based on session state
-            initial_person_index = 0 # Default to "Select a person..."
-            if st.session_state['selected_person'] in filtered_people:
-                # If a person is selected and is in the filtered list, find their index (+1 for placeholder)
-                initial_person_index = filtered_people.index(st.session_state['selected_person']) + 1 
-            
+        with col2:
             person_selection = st.selectbox(
-                f"Select {'Investor' if st.session_state['selected_transaction_type'] == 'Paid to Me' else 'Client'}",
+                f"Select {'Investor' if transaction_type == 'Paid to Me' else 'Client'}",
                 options=display_options,
                 index=initial_person_index,
-                key='person_selectbox_widget' # Unique key for the widget
+                key='person_selectbox_widget'
             )
 
-            # Update session state with the actual selected person (not the placeholder)
             if person_selection == "Select a person...":
-                st.session_state['selected_person'] = None # Store None if placeholder is selected
+                st.session_state['selected_person'] = None
             else:
-                st.session_state['selected_person'] = person_selection # Store the actual person name
-            
-            # Selectbox for status, linked to session state
+                st.session_state['selected_person'] = person_selection
+
             status = st.selectbox(
                 "Status", 
                 ["completed", "pending"], 
-                key='status_input' # Linked to session state
+                key='status_input'
             )
-            
-            # Text input for description, linked to session state
+
             description = st.text_input(
                 "Description (optional)", 
-                key='description_input' # Linked to session state
+                key='description_input'
             )
-        
+
         submitted = st.form_submit_button("Add Transaction")
         if submitted:
-            # Validate that a person is selected (not the placeholder)
-            if st.session_state['selected_person'] is None: 
+            if st.session_state['selected_person'] is None:
                 st.error("Please select a person to add the transaction.")
             else:
                 try:
                     new_entry = pd.DataFrame([[
                         st.session_state['date_input'].strftime("%Y-%m-%d"), 
-                        st.session_state['selected_person'], # Use the value from session state
+                        st.session_state['selected_person'], 
                         st.session_state['amount_input'], 
-                        'paid_to_me' if st.session_state['selected_transaction_type'] == "Paid to Me" else 'i_paid', 
+                        'paid_to_me' if transaction_type == "Paid to Me" else 'i_paid', 
                         st.session_state['status_input'],
                         st.session_state['description_input'] or ''
                     ]], columns=["date", "person", "amount", "type", "status", "description"])
-                    
+
                     new_entry.to_csv(CSV_FILE, mode='a', header=False, index=False)
                     st.success("Transaction added successfully!")
-                    generate_summary() # Regenerate HTML summary and push to git
-                    
-                    # Reset all form fields in session state after successful submission
-                    reset_transaction_form() 
-                    
-                    # Rerun the app to ensure all widgets reflect the reset state and updated balances
-                    st.rerun() 
+                    generate_summary()
+                    reset_transaction_form()
+                    st.rerun()
                 except Exception as e:
                     st.error(f"Error adding transaction: {str(e)}")
+
 
 with tab2:
     st.subheader("Transaction History")
