@@ -16,7 +16,7 @@ if not os.path.exists(CSV_FILE):
 else:
     # Repair existing CSV if needed
     df = pd.read_csv(CSV_FILE)
-    for col in ["description"]:  # Add any other new columns here
+    for col in ["description"]:
         if col not in df.columns:
             df[col] = ''
     df.to_csv(CSV_FILE, index=False)
@@ -39,12 +39,10 @@ def generate_summary():
         df = pd.read_csv(CSV_FILE)
         people_df = pd.read_csv(PEOPLE_FILE)
         
-        # Ensure all columns exist
         for col in ["description"]:
             if col not in df.columns:
                 df[col] = ''
         
-        # Merge with people data
         df = pd.merge(df, people_df, left_on='person', right_on='name', how='left')
         
         summary = {
@@ -136,21 +134,39 @@ with tab1:
             date = st.date_input("Date", datetime.now())
             
         with col2:
-            # Load people data
             people_df = pd.read_csv(PEOPLE_FILE)
-            if transaction_type == "Paid to Me":
-                person_list = people_df[people_df['category'] == 'investor']['name'].unique()
-            else:
-                person_list = people_df[people_df['category'] == 'client']['name'].unique()
             
-            person = st.selectbox("Person", person_list if len(person_list) > 0 else ["Add people first"])
+            # Get all people first
+            all_people = people_df['name'].unique().tolist()
+            
+            # Then filter based on transaction type
+            if transaction_type == "Paid to Me":
+                filtered_people = people_df[people_df['category'] == 'investor']['name'].unique().tolist()
+                placeholder = "Select investor (add investors in Manage People tab)"
+            else:
+                filtered_people = people_df[people_df['category'] == 'client']['name'].unique().tolist()
+                placeholder = "Select client (add clients in Manage People tab)"
+            
+            # If no filtered people, show all people with warning
+            if not filtered_people:
+                st.warning(f"No {'investors' if transaction_type == 'Paid to Me' else 'clients'} found! Showing all people")
+                filtered_people = all_people
+                placeholder = "Select person"
+            
+            person = st.selectbox(
+                "Person",
+                options=filtered_people,
+                index=0 if filtered_people else None,
+                placeholder=placeholder
+            )
+            
             status = st.selectbox("Status", ["completed", "pending"])
             description = st.text_input("Description (optional)")
         
         submitted = st.form_submit_button("Add Transaction")
         if submitted:
-            if person == "Add people first":
-                st.error("Please add people in the 'Manage People' tab first")
+            if not person:
+                st.error("Please select a person")
             else:
                 try:
                     new_entry = pd.DataFrame([[
@@ -162,7 +178,6 @@ with tab1:
                         description or ''
                     ]], columns=["date", "person", "amount", "type", "status", "description"])
                     
-                    # Append to CSV
                     new_entry.to_csv(CSV_FILE, mode='a', header=False, index=False)
                     st.success("Transaction added successfully!")
                     generate_summary()
