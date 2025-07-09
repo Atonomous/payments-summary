@@ -3,3 +3,4 @@ date,person,amount,type,status,description
 2025-07-09,Mazhar,784.0,owed_to_me,pending,
 2025-07-09,Rizwan,2000000.0,paid_to_me,pending,
 2025-07-09,Shabbir,78512.0,i_paid,completed,
+2025-07-09,Shabbir2,8875.0,i_paid,completed,
