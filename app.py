@@ -44,6 +44,7 @@ def git_push():
     except Exception as e:
         st.error(f"Error updating GitHub: {e}")
 
+
 def generate_html_summary(df):
     # Create a copy and ensure proper data types
     df = df.copy()
@@ -113,7 +114,7 @@ def generate_html_summary(df):
     transactions['Amount'] = transactions['amount'].apply(lambda x: f"Rs. {x:,.2f}")
     transactions['Type'] = transactions['Type'].map({'paid_to_me': 'Received', 'i_paid': 'Paid'})
     
-    # Generate HTML with premium styling
+    # Generate HTML with premium styling and filters
     html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -122,215 +123,77 @@ def generate_html_summary(df):
     <title>Payment Summary | Financial Report</title>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <style>
-        :root {{
-            --primary: #4361ee;
-            --secondary: #3f37c9;
-            --success: #4cc9f0;
-            --danger: #f72585;
-            --warning: #f8961e;
-            --info: #4895ef;
-            --light: #f8f9fa;
-            --dark: #212529;
-            --white: #ffffff;
-        }}
+        /* ... (keep all your existing styles) ... */
         
-        * {{
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }}
-        
-        body {{
-            font-family: 'Poppins', sans-serif;
-            background-color: #f5f7fa;
-            color: #333;
-            line-height: 1.6;
-        }}
-        
-        .container {{
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 30px 20px;
-        }}
-        
-        header {{
-            text-align: center;
-            margin-bottom: 40px;
-            padding-bottom: 20px;
-            border-bottom: 1px solid #e0e0e0;
-        }}
-        
-        .logo {{
-            font-size: 28px;
-            font-weight: 700;
-            color: var(--primary);
-            margin-bottom: 10px;
-        }}
-        
-        .report-title {{
-            font-size: 24px;
-            color: var(--dark);
-            margin-bottom: 10px;
-        }}
-        
-        .report-date {{
-            color: #666;
-            font-size: 14px;
-        }}
-        
-        .summary-cards {{
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 20px;
-            margin-bottom: 40px;
-        }}
-        
-        .card {{
+        .filters {{
             background: var(--white);
             border-radius: 10px;
-            padding: 25px;
+            padding: 20px;
+            margin-bottom: 30px;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
         }}
         
-        .card:hover {{
-            transform: translateY(-5px);
-            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
-        }}
-        
-        .card-header {{
-            display: flex;
-            align-items: center;
+        .filter-grid {{
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 15px;
             margin-bottom: 15px;
         }}
         
-        .card-icon {{
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-right: 15px;
-            font-size: 18px;
+        .filter-group {{
+            margin-bottom: 10px;
         }}
         
-        .received .card-icon {{ background-color: rgba(67, 97, 238, 0.1); color: var(--primary); }}
-        .paid .card-icon {{ background-color: rgba(247, 37, 133, 0.1); color: var(--danger); }}
-        .balance .card-icon {{ background-color: rgba(76, 201, 240, 0.1); color: var(--success); }}
-        
-        .card-title {{
-            font-size: 16px;
+        .filter-group label {{
+            display: block;
+            margin-bottom: 5px;
             font-weight: 500;
-            color: #666;
-        }}
-        
-        .card-amount {{
-            font-size: 24px;
-            font-weight: 600;
-            margin: 5px 0;
-        }}
-        
-        .card-details {{
             font-size: 14px;
-            color: #666;
+            color: var(--dark);
+        }}
+        
+        .filter-group select, 
+        .filter-group input {{
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-family: 'Poppins', sans-serif;
+        }}
+        
+        .filter-actions {{
+            display: flex;
+            justify-content: space-between;
             margin-top: 10px;
         }}
         
-        .card-details div {{
-            margin-bottom: 5px;
-            display: flex;
-            align-items: center;
-        }}
-        
-        .card-details i {{
-            margin-right: 8px;
-            width: 18px;
-            text-align: center;
-        }}
-        
-        .section-title {{
-            font-size: 20px;
-            font-weight: 600;
-            margin: 30px 0 20px;
-            color: var(--dark);
-            display: flex;
-            align-items: center;
-        }}
-        
-        .section-title i {{
-            margin-right: 10px;
-            color: var(--primary);
-        }}
-        
-        table {{
-            width: 100%;
-            border-collapse: collapse;
-            background: var(--white);
-            border-radius: 10px;
-            overflow: hidden;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
-            margin-bottom: 30px;
-        }}
-        
-        th, td {{
-            padding: 15px;
-            text-align: left;
-            border-bottom: 1px solid #f0f0f0;
-        }}
-        
-        th {{
+        .filter-btn {{
             background-color: var(--primary);
             color: white;
-            font-weight: 500;
-            text-transform: uppercase;
-            font-size: 13px;
-            letter-spacing: 0.5px;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-family: 'Poppins', sans-serif;
+            transition: background-color 0.3s;
         }}
         
-        tr:hover {{
-            background-color: #f8f9fa;
+        .filter-btn:hover {{
+            background-color: var(--secondary);
         }}
         
-        .status {{
-            display: inline-block;
-            padding: 5px 10px;
-            border-radius: 20px;
-            font-size: 12px;
-            font-weight: 500;
-            white-space: nowrap;
+        .reset-btn {{
+            background-color: #f0f0f0;
+            color: #333;
         }}
         
-        .completed {{ background-color: rgba(40, 167, 69, 0.1); color: #28a745; }}
-        .pending {{ background-color: rgba(255, 193, 7, 0.1); color: #ffc107; }}
-        .processing {{ background-color: rgba(13, 110, 253, 0.1); color: #0d6efd; }}
-        .bounced {{ background-color: rgba(220, 53, 69, 0.1); color: #dc3545; }}
-        .received-given {{ background-color: rgba(108, 117, 125, 0.1); color: #6c757d; }}
-        .processing-done {{ background-color: rgba(25, 135, 84, 0.1); color: #198754; }}
-        
-        .footer {{
+        .no-results {{
             text-align: center;
-            margin-top: 40px;
-            padding-top: 20px;
-            border-top: 1px solid #e0e0e0;
+            padding: 30px;
             color: #666;
-            font-size: 14px;
-        }}
-        
-        .footer i {{
-            margin: 0 5px;
-        }}
-        
-        @media (max-width: 768px) {{
-            .summary-cards {{
-                grid-template-columns: 1fr;
-            }}
-            
-            th, td {{
-                padding: 12px 8px;
-                font-size: 14px;
-            }}
+            display: none;
         }}
     </style>
 </head>
@@ -346,59 +209,66 @@ def generate_html_summary(df):
             </div>
         </header>
         
-        <div class="summary-cards">
-            <div class="card received">
-                <div class="card-header">
-                    <div class="card-icon">
-                        <i class="fas fa-arrow-down"></i>
-                    </div>
-                    <div>
-                        <div class="card-title">Total Received</div>
-                        <div class="card-amount">Rs.{totals['total_received']:,.2f}</div>
-                    </div>
+        <!-- Summary Cards (keep existing card code) -->
+        
+        <div class="filters">
+            <h2 class="section-title">
+                <i class="fas fa-filter"></i> Filters
+            </h2>
+            
+            <div class="filter-grid">
+                <div class="filter-group">
+                    <label for="date-filter">Date Range</label>
+                    <input type="date" id="start-date" class="date-filter">
+                    <span style="display: inline-block; margin: 0 5px;">to</span>
+                    <input type="date" id="end-date" class="date-filter">
                 </div>
-                <div class="card-details">
-                    <div><i class="fas fa-coins"></i> Cash: Rs.{totals['cash_received']:,.2f}</div>
-                    <div><i class="fas fa-money-check-alt"></i> Cheque: Rs.{totals['cheque_received']:,.2f}</div>
-                    <div><i class="fas fa-clock"></i> Pending: Rs.{totals['pending_received']:,.2f}</div>
+                
+                <div class="filter-group">
+                    <label for="name-filter">Person</label>
+                    <select id="name-filter">
+                        <option value="">All</option>
+                        {''.join(f'<option value="{name}">{name}</option>' for name in sorted(df['person'].unique()))}
+                    </select>
+                </div>
+                
+                <div class="filter-group">
+                    <label for="type-filter">Transaction Type</label>
+                    <select id="type-filter">
+                        <option value="">All</option>
+                        <option value="paid_to_me">Received</option>
+                        <option value="i_paid">Paid</option>
+                    </select>
+                </div>
+                
+                <div class="filter-group">
+                    <label for="method-filter">Payment Method</label>
+                    <select id="method-filter">
+                        <option value="">All</option>
+                        <option value="cash">Cash</option>
+                        <option value="cheque">Cheque</option>
+                    </select>
+                </div>
+                
+                <div class="filter-group">
+                    <label for="status-filter">Cheque Status</label>
+                    <select id="status-filter">
+                        <option value="">All</option>
+                        <option value="received/given">Received/Given</option>
+                        <option value="processing">Processing</option>
+                        <option value="bounced">Bounced</option>
+                        <option value="processing done">Processing Done</option>
+                    </select>
                 </div>
             </div>
             
-            <div class="card paid">
-                <div class="card-header">
-                    <div class="card-icon">
-                        <i class="fas fa-arrow-up"></i>
-                    </div>
-                    <div>
-                        <div class="card-title">Total Paid</div>
-                        <div class="card-amount">Rs.{totals['total_paid']:,.2f}</div>
-                    </div>
-                </div>
-                <div class="card-details">
-                    <div><i class="fas fa-coins"></i> Cash: Rs.{totals['cash_paid']:,.2f}</div>
-                    <div><i class="fas fa-money-check-alt"></i> Cheque: Rs.{totals['cheque_paid']:,.2f}</div>
-                    <div><i class="fas fa-clock"></i> Pending: Rs.{totals['pending_paid']:,.2f}</div>
-                </div>
-            </div>
-            
-            <div class="card balance">
-                <div class="card-header">
-                    <div class="card-icon">
-                        <i class="fas fa-balance-scale"></i>
-                    </div>
-                    <div>
-                        <div class="card-title">Net Balance</div>
-                        <div class="card-amount">Rs.{totals['net_balance']:,.2f}</div>
-                    </div>
-                </div>
-                <div class="card-details">
-                    <div><i class="fas fa-info-circle"></i> Received - Paid</div>
-                    <div style="margin-top: 10px;">
-                        {'<span style="color: #28a745;"><i class="fas fa-check-circle"></i> Positive Balance</span>' 
-                         if totals['net_balance'] >= 0 
-                         else '<span style="color: #dc3545;"><i class="fas fa-exclamation-circle"></i> Negative Balance</span>'}
-                    </div>
-                </div>
+            <div class="filter-actions">
+                <button class="filter-btn" onclick="applyFilters()">
+                    <i class="fas fa-filter"></i> Apply Filters
+                </button>
+                <button class="filter-btn reset-btn" onclick="resetFilters()">
+                    <i class="fas fa-redo"></i> Reset
+                </button>
             </div>
         </div>
         
@@ -406,7 +276,12 @@ def generate_html_summary(df):
             <i class="fas fa-list"></i> All Transactions
         </h2>
         
-        <table>
+        <div class="no-results" id="no-results">
+            <i class="fas fa-search" style="font-size: 24px; margin-bottom: 10px;"></i>
+            <p>No transactions match your filters</p>
+        </div>
+        
+        <table id="transactions-table">
             <thead>
                 <tr>
                     <th>Date</th>
@@ -423,13 +298,17 @@ def generate_html_summary(df):
             </thead>
             <tbody>"""
 
-    # Add transaction rows
+    # Add transaction rows with data attributes for filtering
     for _, row in transactions.iterrows():
         status_class = row['Status'].lower().replace(' ', '-')
         cheque_status_class = str(row['Cheque Status']).lower().replace(' ', '-').replace('/', '-')
         
         html += f"""
-                <tr>
+                <tr data-date="{row['Date']}" 
+                    data-person="{row['Person']}" 
+                    data-type="{'paid_to_me' if row['Type'] == 'Received' else 'i_paid'}" 
+                    data-method="{row['Method'].lower()}" 
+                    data-cheque-status="{row['Cheque Status'].lower() if pd.notna(row['Cheque Status']) else ''}">
                     <td>{row['Date']}</td>
                     <td>{row['Person']}</td>
                     <td>{row['Amount']}</td>
@@ -450,6 +329,78 @@ def generate_html_summary(df):
             <p><i class="fas fa-file-alt"></i> This report was automatically generated by Payment Tracker System</p>
             <p><i class="far fa-copyright"></i> {datetime.now().year} All Rights Reserved</p>
         </div>
+        
+        <script>
+            function applyFilters() {
+                const startDate = $('#start-date').val();
+                const endDate = $('#end-date').val();
+                const person = $('#name-filter').val().toLowerCase();
+                const type = $('#type-filter').val();
+                const method = $('#method-filter').val();
+                const chequeStatus = $('#status-filter').val().toLowerCase();
+                
+                let visibleRows = 0;
+                
+                $('#transactions-table tbody tr').each(function() {
+                    const rowDate = $(this).data('date');
+                    const rowPerson = $(this).data('person').toLowerCase();
+                    const rowType = $(this).data('type');
+                    const rowMethod = $(this).data('method');
+                    const rowChequeStatus = $(this).data('cheque-status');
+                    
+                    // Date filter
+                    const datePass = !startDate || !endDate || 
+                                   (rowDate >= startDate && rowDate <= endDate);
+                    
+                    // Person filter
+                    const personPass = !person || rowPerson.includes(person);
+                    
+                    // Type filter
+                    const typePass = !type || rowType === type;
+                    
+                    // Method filter
+                    const methodPass = !method || rowMethod === method;
+                    
+                    // Cheque status filter
+                    const chequeStatusPass = !chequeStatus || 
+                                          (rowChequeStatus && rowChequeStatus.includes(chequeStatus));
+                    
+                    if (datePass && personPass && typePass && methodPass && chequeStatusPass) {
+                        $(this).show();
+                        visibleRows++;
+                    } else {
+                        $(this).hide();
+                    }
+                });
+                
+                // Show/hide no results message
+                if (visibleRows === 0) {
+                    $('#no-results').show();
+                    $('#transactions-table').hide();
+                } else {
+                    $('#no-results').hide();
+                    $('#transactions-table').show();
+                }
+            }
+            
+            function resetFilters() {
+                $('.filter-group select').val('');
+                $('.date-filter').val('');
+                $('#transactions-table tbody tr').show();
+                $('#no-results').hide();
+                $('#transactions-table').show();
+            }
+            
+            // Initialize date pickers with reasonable defaults
+            $(document).ready(function() {
+                const today = new Date();
+                const oneMonthAgo = new Date();
+                oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+                
+                $('#start-date').val(oneMonthAgo.toISOString().split('T')[0]);
+                $('#end-date').val(today.toISOString().split('T')[0]);
+            });
+        </script>
     </div>
 </body>
 </html>"""
