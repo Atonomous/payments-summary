@@ -1,3 +1,6 @@
 date,person,amount,type,status,description
 2025-07-09,Rizwan,21000.0,paid_to_me,pending,1st installment
 2025-07-09,Shabbir,12000.0,i_paid,pending,Paid first time
+2025-07-09,Shabbir,9000.0,i_paid,completed,Paid all
+2025-07-09,Rizwan,0.0,paid_to_me,completed,
+2025-07-09,Shabbir,0.0,i_paid,completed,
