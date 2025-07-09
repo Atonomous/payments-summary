@@ -126,26 +126,16 @@ st.title("💰 Payment Tracker")
 tab1, tab2, tab3 = st.tabs(["Add Transaction", "View Transactions", "Manage People"])
 
 with tab1:
-    # Initialize session state for transaction type
-    if 'transaction_type' not in st.session_state:
-        st.session_state.transaction_type = "Paid to Me"
-    
     with st.form("payment_form", clear_on_submit=True):
         col1, col2 = st.columns(2)
         
         with col1:
-            # Use session state to maintain selection
-            transaction_type = st.radio(
-                "Transaction Type", 
-                ["Paid to Me", "I Paid"], 
-                horizontal=True,
-                index=0 if st.session_state.transaction_type == "Paid to Me" else 1,
-                key="transaction_type_radio"
-            )
+            transaction_type = st.radio("Transaction Type", ["Paid to Me", "I Paid"], horizontal=True)
             amount = st.number_input("Amount (Rs.)", min_value=0.0, step=0.01, format="%.2f")
             date = st.date_input("Date", datetime.now())
             
         with col2:
+            person = None # Initialize person
             try:
                 people_df = pd.read_csv(PEOPLE_FILE)
                 
@@ -154,38 +144,30 @@ with tab1:
                 
                 if transaction_type == "Paid to Me":
                     filtered_people = people_df[people_df['category'] == 'investor']['name'].tolist()
-                    placeholder = "Select investor"
                 else:
                     filtered_people = people_df[people_df['category'] == 'client']['name'].tolist()
-                    placeholder = "Select client"
                 
-                # Maintain person selection in session state
-                if 'selected_person' not in st.session_state:
-                    st.session_state.selected_person = filtered_people[0] if filtered_people else None
+                if not filtered_people:
+                    st.warning(f"No {'investors' if transaction_type == 'Paid to Me' else 'clients'} found. Add people in 'Manage People' tab.")
+                    # Fallback to all people if filtered list is empty, but warn
+                    filtered_people = people_df['name'].tolist() 
                 
                 person = st.selectbox(
-                    "Person",
+                    f"Select {'Investor' if transaction_type == 'Paid to Me' else 'Client'}",
                     options=filtered_people,
-                    index=0 if filtered_people else None,
-                    placeholder=placeholder,
-                    key="person_select"
+                    index=0 if filtered_people else None
                 )
-                
-                # Update session state
-                if person:
-                    st.session_state.selected_person = person
                 
             except Exception as e:
                 st.error(f"Error loading people: {str(e)}")
-                person = None
             
             status = st.selectbox("Status", ["completed", "pending"])
             description = st.text_input("Description (optional)")
         
         submitted = st.form_submit_button("Add Transaction")
         if submitted:
-            if not person:
-                st.error("Please select a person")
+            if person is None: # Check if person is actually selected
+                st.error("Please select a person to add the transaction.")
             else:
                 try:
                     new_entry = pd.DataFrame([[
@@ -200,8 +182,6 @@ with tab1:
                     new_entry.to_csv(CSV_FILE, mode='a', header=False, index=False)
                     st.success("Transaction added successfully!")
                     generate_summary()
-                    # Force rerun to maintain UI state
-                    st.rerun()
                 except Exception as e:
                     st.error(f"Error adding transaction: {str(e)}")
 
@@ -259,7 +239,7 @@ with tab3:
                         new_person = pd.DataFrame([[name.strip(), category]], columns=["name", "category"])
                         new_person.to_csv(PEOPLE_FILE, mode='a', header=False, index=False)
                         st.success(f"{name} added as {category}!")
-                        st.rerun()
+                        # No st.rerun() here
                     else:
                         st.warning("This person already exists!")
                 except Exception as e:
@@ -270,16 +250,21 @@ with tab3:
         if len(people_df) > 0:
             st.dataframe(people_df, hide_index=True, use_container_width=True)
             
-            person_to_delete = st.selectbox("Select person to delete", people_df['name'])
-            if st.button("Delete Selected Person"):
-                transactions = pd.read_csv(CSV_FILE)
-                if person_to_delete in transactions['person'].values:
-                    st.error("Cannot delete - this person has existing transactions")
-                else:
-                    people_df = people_df[people_df['name'] != person_to_delete]
-                    people_df.to_csv(PEOPLE_FILE, index=False)
-                    st.success(f"{person_to_delete} deleted!")
-                    st.rerun()
+            # Ensure selectbox has options
+            if not people_df['name'].empty:
+                person_to_delete = st.selectbox("Select person to delete", people_df['name'])
+                if st.button("Delete Selected Person"):
+                    transactions = pd.read_csv(CSV_FILE)
+                    if person_to_delete in transactions['person'].values:
+                        st.error("Cannot delete - this person has existing transactions")
+                    else:
+                        people_df = people_df[people_df['name'] != person_to_delete]
+                        people_df.to_csv(PEOPLE_FILE, index=False)
+                        st.success(f"{person_to_delete} deleted!")
+                        # No st.rerun() here
+            else:
+                st.info("No people to delete.")
+
         else:
             st.info("No people added yet.")
     except Exception as e:
