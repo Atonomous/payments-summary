@@ -20,6 +20,7 @@ def init_files():
         ]).to_csv(CSV_FILE, index=False)
     else:
         df = pd.read_csv(CSV_FILE)
+        # Add 'receipt_number' column if it doesn't exist
         if 'receipt_number' not in df.columns:
             df['receipt_number'] = ''
             df.to_csv(CSV_FILE, index=False)
@@ -103,26 +104,16 @@ st.set_page_config(layout="wide")
 st.title("💰 Payment Tracker")
 st.sidebar.markdown(f"[🌐 View Public Summary]({SUMMARY_URL})", unsafe_allow_html=True)
 
-# Session State
+# Session State Initialization
 def init_state():
     keys = [
-        'amount_input', 'date_input', 'payment_method',
-        'cheque_number', 'cheque_status', 'transaction_status',
-        'description_input', 'selected_transaction_type', 'selected_person',
-        'receipt_number_input', 'editing_row_idx'
+        'selected_transaction_type', 'payment_method', 'editing_row_idx', 'selected_person'
     ]
     defaults = {
-        'amount_input': 0.0,
-        'date_input': datetime.now().date(),
-        'payment_method': 'cash',
-        'cheque_number': '',
-        'cheque_status': 'processing',
-        'transaction_status': 'completed',
-        'description_input': '',
         'selected_transaction_type': 'Paid to Me',
-        'selected_person': None,
-        'receipt_number_input': '',
-        'editing_row_idx': None
+        'payment_method': 'cash',
+        'editing_row_idx': None,
+        'selected_person': "Select..." # Default value for the selectbox
     }
     for k in keys:
         if k not in st.session_state:
@@ -130,17 +121,12 @@ def init_state():
 
 init_state()
 
-def reset_form():
-    st.session_state['amount_input'] = 0.0
-    st.session_state['date_input'] = datetime.now().date()
+# Function to reset session state for elements not cleared by form
+def reset_form_session_state_for_add_transaction():
+    st.session_state['selected_transaction_type'] = 'Paid to Me'
     st.session_state['payment_method'] = 'cash'
-    st.session_state['cheque_number'] = ''
-    st.session_state['cheque_status'] = 'processing'
-    st.session_state['transaction_status'] = 'completed'
-    st.session_state['description_input'] = ''
-    st.session_state['selected_person'] = None
-    st.session_state['receipt_number_input'] = ''
-    st.session_state['editing_row_idx'] = None
+    st.session_state['selected_person'] = "Select..." # Reset the selected person to default
+    st.session_state['editing_row_idx'] = None # Ensure editing mode is off
 
 tab1, tab2, tab3 = st.tabs(["Add Transaction", "View Transactions", "Manage People"])
 
@@ -157,7 +143,7 @@ with tab1:
     # Payment Method selection outside the form for immediate reactivity
     st.session_state['payment_method'] = st.radio(
         "Payment Method", ["cash", "cheque"], horizontal=True,
-        key='payment_method_radio' # Unique key for this radio button
+        key='payment_method_radio'
     )
 
     # Filter people based on the selected transaction type
@@ -168,44 +154,44 @@ with tab1:
     except Exception:
         filtered_people = []
 
-    # Ensure "Select..." is always the first option
     person_options = ["Select..."] + sorted(filtered_people)
     
-    # Determine the initial index for the selectbox
-    try:
-        current_person_index = person_options.index(st.session_state['selected_person']) if st.session_state['selected_person'] in person_options else 0
-    except ValueError:
-        current_person_index = 0
+    # Ensure selected_person is a valid option or default to "Select..."
+    if st.session_state['selected_person'] not in person_options:
+        st.session_state['selected_person'] = "Select..."
 
-    with st.form("transaction_form"):
+    current_person_index = person_options.index(st.session_state['selected_person'])
+
+    with st.form("transaction_form", clear_on_submit=True): # clear_on_submit handles resetting form fields
         col1, col2 = st.columns(2)
         with col1:
-            amount = st.number_input("Amount (Rs.)", min_value=0.0, format="%.2f", key='amount_input')
-            date = st.date_input("Date", value=st.session_state['date_input'], key='date_input')
-            
+            amount = st.number_input("Amount (Rs.)", min_value=0.0, format="%.2f")
+            date = st.date_input("Date", value=datetime.now().date())
+
             receipt_number = ""
             cheque_number = ""
             cheque_status = ""
 
             if st.session_state['payment_method'] == "cash":
-                receipt_number = st.text_input("Receipt Number", key='receipt_number_input')
+                receipt_number = st.text_input("Receipt Number")
             elif st.session_state['payment_method'] == "cheque":
-                cheque_number = st.text_input("Cheque Number", key='cheque_number')
+                cheque_number = st.text_input("Cheque Number")
                 cheque_status = st.selectbox(
                     "Cheque Status",
-                    ["received/given", "processing", "bounced", "processing done"],
-                    key='cheque_status'
+                    ["received/given", "processing", "bounced", "processing done"]
                 )
 
         with col2:
+            # st.session_state['selected_person'] is managed by this selectbox
             st.session_state['selected_person'] = st.selectbox(
                 "Select Person", person_options, index=current_person_index, key='selected_person_dropdown'
             )
             if st.session_state['selected_person'] == "Select...":
+                # If "Select..." is chosen, ensure the stored value is None for logic
                 st.session_state['selected_person'] = None
 
-            status = st.selectbox("Transaction Status", ["completed", "pending"], key='transaction_status')
-            description = st.text_input("Description", key='description_input')
+            status = st.selectbox("Transaction Status", ["completed", "pending"])
+            description = st.text_input("Description")
 
         submitted = st.form_submit_button("Add Transaction")
         if submitted:
@@ -233,7 +219,7 @@ with tab1:
                 generate_html_summary(pd.read_csv(CSV_FILE))
                 git_push()
                 st.success("Transaction added successfully.")
-                reset_form()
+                reset_form_session_state_for_add_transaction()
                 st.rerun()
 
 # ------------------ Tab 2: View Transactions ------------------
@@ -419,5 +405,5 @@ try:
         st.write("**Paid**")
         st.write(f"Cash: Rs. {cash_paid:,.2f}")
         st.write(f"Cheque: Rs. {cheque_paid:,.2f}")
-except:
+except Exception as e:
     st.sidebar.info("No transactions yet.")
