@@ -2,3 +2,4 @@ date,person,amount,type,status,description,payment_method,cheque_number,cheque_s
 2025-07-09,Shabbir,0.0,i_paid,completed,,cash,,,completed,
 2025-07-09,Shabbir,1500000.0,i_paid,completed,,cheque,52145256535465315,processing done,completed,
 2025-07-09,Rizwan,150000.0,paid_to_me,completed,,cheque,36518965163531653,received/given,completed,
+2025-07-09,Rizwan,1500000.0,paid_to_me,completed,,cheque,2516515132,processing,completed,
