@@ -300,7 +300,7 @@
             </div>
             <h1 class="report-title">Payment Summary Report</h1>
             <div class="report-date">
-                <i class="far fa-calendar-alt"></i> July 10, 2025 at 01:23 AM
+                <i class="far fa-calendar-alt"></i> July 10, 2025 at 01:58 AM
             </div>
         </header>
         
@@ -312,13 +312,13 @@
                     </div>
                     <div>
                         <div class="card-title">Total Received</div>
-                        <div class="card-amount">Rs.1,706,000.00</div>
+                        <div class="card-amount">Rs.125,000.00</div>
                     </div>
                 </div>
                 <div class="card-details">
-                    <div><i class="fas fa-coins"></i> Cash: Rs.1,250,000.00</div>
-                    <div><i class="fas fa-money-check-alt"></i> Cheque: Rs.456,000.00</div>
-                    <div><i class="fas fa-clock"></i> Pending: Rs.0.00</div>
+                    <div><i class="fas fa-coins"></i> Cash: Rs.125,000.00</div>
+                    <div><i class="fas fa-money-check-alt"></i> Cheque: Rs.0.00</div>
+                    <div><i class="fas fa-clock"></i> Pending: Rs.125,000.00</div>
                 </div>
             </div>
             
@@ -346,7 +346,7 @@
                     </div>
                     <div>
                         <div class="card-title">Net Balance</div>
-                        <div class="card-amount">Rs.1,706,000.00</div>
+                        <div class="card-amount">Rs.125,000.00</div>
                     </div>
                 </div>
                 <div class="card-details">
@@ -427,177 +427,41 @@
             <i class="fas fa-search" style="font-size: 24px; margin-bottom: 10px;"></i>
             <p>No transactions match your filters</p>
         </div>
-        
-        <table id="transactions-table">
-            <thead>
-                <tr>
-                    <th>Date</th>
-                    <th>Person</th>
-                    <th>Amount</th>
-                    <th>Type</th>
-                    <th>Method</th>
-                    <th>Cheque No.</th>
-                    <th>Receipt No.</th>
-                    <th>Status</th>
-                    <th>Cheque Status</th>
-                    <th>Description</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr data-date="2025-07-10" 
-                    data-person="Rizwan" 
-                    data-type="paid_to_me" 
-                    data-method="cheque" 
-                    data-cheque-status="completed">
-                    <td>2025-07-10</td>
-                    <td>Rizwan</td>
-                    <td>Rs. 152,000.00</td>
-                    <td>Received</td>
-                    <td>Cheque</td>
-                    <td>-</td>
-                    <td>-</td>
-                    <td><span class="status completed">Completed</span></td>
-                    <td><span class="status completed">completed</span></td>
-                    <td>Paid first time</td>
-                </tr>
-                <tr data-date="2025-07-10" 
-                    data-person="Rizwan" 
-                    data-type="paid_to_me" 
-                    data-method="cheque" 
-                    data-cheque-status="completed">
-                    <td>2025-07-10</td>
-                    <td>Rizwan</td>
-                    <td>Rs. 152,000.00</td>
-                    <td>Received</td>
-                    <td>Cheque</td>
-                    <td>21,545,250</td>
-                    <td>-</td>
-                    <td><span class="status completed">Completed</span></td>
-                    <td><span class="status completed">completed</span></td>
-                    <td>Paid first time</td>
-                </tr>
-                <tr data-date="2025-07-10" 
-                    data-person="Rizwan" 
-                    data-type="paid_to_me" 
-                    data-method="cheque" 
-                    data-cheque-status="completed">
-                    <td>2025-07-10</td>
-                    <td>Rizwan</td>
-                    <td>Rs. 152,000.00</td>
-                    <td>Received</td>
-                    <td>Cheque</td>
-                    <td>21,545,250</td>
-                    <td>-</td>
-                    <td><span class="status completed">Completed</span></td>
-                    <td><span class="status completed">completed</span></td>
-                    <td>Paid first time</td>
-                </tr>
+    
+    <table id="transactions-table">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Person</th>
+                <th>Amount</th>
+                <th>Type</th>
+                <th>Method</th>
+                <th>Reference No.</th>
+                <th>Status</th>
+                <th>Cheque Status</th>
+                <th>Description</th>
+            </tr>
+        </thead>
+        <tbody>
                 <tr data-date="2025-07-10" 
                     data-person="Rizwan" 
                     data-type="paid_to_me" 
                     data-method="cash" 
                     data-cheque-status="">
-                    <td>2025-07-10</td>
+                    <td>10-07-2025</td>
                     <td>Rizwan</td>
-                    <td>Rs. 1,250,000.00</td>
+                    <td>Rs. 125,000.00</td>
                     <td>Received</td>
                     <td>Cash</td>
-                    <td>-</td>
-                    <td>214522785.0</td>
-                    <td><span class="status completed">Completed</span></td>
-                    <td><span class="status nan">-</span></td>
-                    <td>Paid First Time</td>
+                    <td>completed</td>
+                    <td><span class="status pending">Pending</span></td>
+                    <td><span class="status "></span></td>
+                    <td>Fully paid</td>
                 </tr>
             </tbody>
         </table>
         
-        <div class="footer">
-            <p><i class="fas fa-file-alt"></i> This report was automatically generated by Payment Tracker System</p>
-            <p><i class="far fa-copyright"></i> {datetime.now().year} All Rights Reserved</p>
-        </div>
-        
-        <script>
-            function applyFilters() {
-                const startDate = $('#start-date').val();
-                const endDate = $('#end-date').val();
-                const person = $('#name-filter').val().toLowerCase();
-                const type = $('#type-filter').val();
-                const method = $('#method-filter').val();
-                const chequeStatus = $('#status-filter').val().toLowerCase();
-                
-                let visibleRows = 0;
-                
-                $('#transactions-table tbody tr').each(function() {
-                    const rowDate = $(this).data('date');
-                    const rowPerson = $(this).data('person').toLowerCase();
-                    const rowType = $(this).data('type');
-                    const rowMethod = $(this).data('method');
-                    const rowChequeStatus = $(this).data('cheque-status');
-                    
-                    // Date filter
-                    const datePass = !startDate || !endDate || 
-                                   (rowDate >= startDate && rowDate <= endDate);
-                    
-                    // Person filter
-                    const personPass = !person || rowPerson.includes(person);
-                    
-                    // Type filter
-                    const typePass = !type || rowType === type;
-                    
-                    // Method filter
-                    const methodPass = !method || rowMethod === method;
-                    
-                    // Cheque status filter
-                    const chequeStatusPass = !chequeStatus || 
-                                          (rowChequeStatus && rowChequeStatus.includes(chequeStatus));
-                    
-                    if (datePass && personPass && typePass && methodPass && chequeStatusPass) {
-                        $(this).show();
-                        visibleRows++;
-                    } else {
-                        $(this).hide();
-                    }
-                });
-                
-                // Show/hide no results message
-                if (visibleRows === 0) {
-                    $('#no-results').show();
-                    $('#transactions-table').hide();
-                } else {
-                    $('#no-results').hide();
-                    $('#transactions-table').show();
-                }
-            }
-            
-            function resetFilters() {
-                $('.filter-group select').val('');
-                $('.date-filter').val('');
-                $('#transactions-table tbody tr').show();
-                $('#no-results').hide();
-                $('#transactions-table').show();
-                // Reset to default date range
-                const today = new Date();
-                const oneMonthAgo = new Date();
-                oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
-                $('#start-date').val(oneMonthAgo.toISOString().split('T')[0]);
-                $('#end-date').val(today.toISOString().split('T')[0]);
-            }
-            
-            // Initialize date pickers with reasonable defaults
-            $(document).ready(function() {
-                const today = new Date();
-                const oneMonthAgo = new Date();
-                oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
-                
-                $('#start-date').val(oneMonthAgo.toISOString().split('T')[0]);
-                $('#end-date').val(today.toISOString().split('T')[0]);
-                
-                // Apply filters when dropdowns change
-                $('.filter-group select').change(function() {
-                    applyFilters();
-                });
-            });
-        </script>
+        <!-- [Rest of the HTML remains the same] -->
     </div>
 </body>
 </html>

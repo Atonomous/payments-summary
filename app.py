@@ -69,23 +69,13 @@ def generate_html_summary(df):
         # Format dates as day-month-year
         df['formatted_date'] = pd.to_datetime(df['date']).dt.strftime('%d-%m-%Y')
         
-        # Force string type for reference numbers
+        # Ensure reference_number remains as string
         df['reference_number'] = df['reference_number'].astype(str)
-        
-        # Clean up 'nan' strings and empty values
         df['reference_number'] = df['reference_number'].replace('nan', '').replace('None', '')
         
-        # Format reference numbers to avoid scientific notation
-        def format_reference_number(num):
-            if num.replace('.', '').isdigit():
-                try:
-                    clean_num = num.replace(',', '').replace('.', '')
-                    return "{:,}".format(int(clean_num))
-                except:
-                    return num
-            return num
-        
-        df['reference_number'] = df['reference_number'].apply(format_reference_number)
+        # Ensure cheque_status remains as string
+        df['cheque_status'] = df['cheque_status'].astype(str)
+        df['cheque_status'] = df['cheque_status'].replace('nan', '').replace('None', '')
         
         # Calculate payment totals
         payment_totals = df.groupby(['type', 'payment_method'])['amount'].sum().unstack().fillna(0)
@@ -129,7 +119,7 @@ def generate_html_summary(df):
         transactions['Amount'] = transactions['amount'].apply(lambda x: f"Rs. {x:,.2f}")
         transactions['Type'] = transactions['Type'].map({'paid_to_me': 'Received', 'i_paid': 'Paid'})
         
-        # Generate HTML with premium styling and filters
+        # Generate HTML
         html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -140,20 +130,287 @@ def generate_html_summary(df):
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <style>
-        /* [Previous CSS styles remain the same] */
+        :root {{
+            --primary: #4361ee;
+            --secondary: #3f37c9;
+            --success: #4cc9f0;
+            --danger: #f72585;
+            --warning: #f8961e;
+            --info: #4895ef;
+            --light: #f8f9fa;
+            --dark: #212529;
+            --white: #ffffff;
+        }}
+        
+        * {{
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }}
+        
+        body {{
+            font-family: 'Poppins', sans-serif;
+            background-color: #f5f7fa;
+            color: #333;
+            line-height: 1.6;
+        }}
+        
+        .container {{
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 30px 20px;
+        }}
+        
+        header {{
+            text-align: center;
+            margin-bottom: 40px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #e0e0e0;
+        }}
+        
+        .logo {{
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--primary);
+            margin-bottom: 10px;
+        }}
+        
+        .report-title {{
+            font-size: 24px;
+            color: var(--dark);
+            margin-bottom: 10px;
+        }}
+        
+        .report-date {{
+            color: #666;
+            font-size: 14px;
+        }}
+        
+        .summary-cards {{
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            margin-bottom: 40px;
+        }}
+        
+        .card {{
+            background: var(--white);
+            border-radius: 10px;
+            padding: 25px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }}
+        
+        .card:hover {{
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+        }}
+        
+        .card-header {{
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+        }}
+        
+        .card-icon {{
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 15px;
+            font-size: 18px;
+        }}
+        
+        .received .card-icon {{ background-color: rgba(67, 97, 238, 0.1); color: var(--primary); }}
+        .paid .card-icon {{ background-color: rgba(247, 37, 133, 0.1); color: var(--danger); }}
+        .balance .card-icon {{ background-color: rgba(76, 201, 240, 0.1); color: var(--success); }}
+        
+        .card-title {{
+            font-size: 16px;
+            font-weight: 500;
+            color: #666;
+        }}
+        
+        .card-amount {{
+            font-size: 24px;
+            font-weight: 600;
+            margin: 5px 0;
+        }}
+        
+        .card-details {{
+            font-size: 14px;
+            color: #666;
+            margin-top: 10px;
+        }}
+        
+        .card-details div {{
+            margin-bottom: 5px;
+            display: flex;
+            align-items: center;
+        }}
+        
+        .card-details i {{
+            margin-right: 8px;
+            width: 18px;
+            text-align: center;
+        }}
+        
+        .section-title {{
+            font-size: 20px;
+            font-weight: 600;
+            margin: 30px 0 20px;
+            color: var(--dark);
+            display: flex;
+            align-items: center;
+        }}
+        
+        .section-title i {{
+            margin-right: 10px;
+            color: var(--primary);
+        }}
+        
+        .filters {{
+            background: var(--white);
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+        }}
+        
+        .filter-grid {{
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 15px;
+        }}
+        
+        .filter-group {{
+            margin-bottom: 10px;
+        }}
+        
+        .filter-group label {{
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            font-size: 14px;
+            color: var(--dark);
+        }}
+        
+        .filter-group select, 
+        .filter-group input {{
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-family: 'Poppins', sans-serif;
+        }}
+        
+        .filter-actions {{
+            display: flex;
+            justify-content: space-between;
+            margin-top: 10px;
+        }}
+        
+        .filter-btn {{
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-family: 'Poppins', sans-serif;
+            transition: background-color 0.3s;
+        }}
+        
+        .filter-btn:hover {{
+            background-color: var(--secondary);
+        }}
+        
+        .reset-btn {{
+            background-color: #f0f0f0;
+            color: #333;
+        }}
         
         table {{
             width: 100%;
-            table-layout: fixed;
+            border-collapse: collapse;
+            background: var(--white);
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+            margin-bottom: 30px;
         }}
-        th:nth-child(1), td:nth-child(1) {{
-            width: 100px;  /* Fixed width for date column */
+        
+        th, td {{
+            padding: 15px;
+            text-align: left;
+            border-bottom: 1px solid #f0f0f0;
         }}
-        th:nth-child(2), td:nth-child(2) {{
-            width: 150px;  /* Fixed width for person column */
+        
+        th {{
+            background-color: var(--primary);
+            color: white;
+            font-weight: 500;
+            text-transform: uppercase;
+            font-size: 13px;
+            letter-spacing: 0.5px;
         }}
-        th:nth-child(3), td:nth-child(3) {{
-            width: 100px;  /* Fixed width for amount column */
+        
+        tr:hover {{
+            background-color: #f8f9fa;
+        }}
+        
+        .status {{
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+            white-space: nowrap;
+        }}
+        
+        .completed {{ background-color: rgba(40, 167, 69, 0.1); color: #28a745; }}
+        .pending {{ background-color: rgba(255, 193, 7, 0.1); color: #ffc107; }}
+        .processing {{ background-color: rgba(13, 110, 253, 0.1); color: #0d6efd; }}
+        .bounced {{ background-color: rgba(220, 53, 69, 0.1); color: #dc3545; }}
+        .received-given {{ background-color: rgba(108, 117, 125, 0.1); color: #6c757d; }}
+        .processing-done {{ background-color: rgba(25, 135, 84, 0.1); color: #198754; }}
+        
+        .no-results {{
+            text-align: center;
+            padding: 30px;
+            color: #666;
+            display: none;
+        }}
+        
+        .footer {{
+            text-align: center;
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #e0e0e0;
+            color: #666;
+            font-size: 14px;
+        }}
+        
+        .footer i {{
+            margin: 0 5px;
+        }}
+        
+        @media (max-width: 768px) {{
+            .summary-cards {{
+                grid-template-columns: 1fr;
+            }}
+            
+            .filter-grid {{
+                grid-template-columns: 1fr;
+            }}
+            
+            th, td {{
+                padding: 12px 8px;
+                font-size: 14px;
+            }}
         }}
     </style>
 </head>
@@ -169,44 +426,168 @@ def generate_html_summary(df):
             </div>
         </header>
         
-        <!-- [Previous summary cards HTML remains the same] -->
+        <div class="summary-cards">
+            <div class="card received">
+                <div class="card-header">
+                    <div class="card-icon">
+                        <i class="fas fa-arrow-down"></i>
+                    </div>
+                    <div>
+                        <div class="card-title">Total Received</div>
+                        <div class="card-amount">Rs.{totals['total_received']:,.2f}</div>
+                    </div>
+                </div>
+                <div class="card-details">
+                    <div><i class="fas fa-coins"></i> Cash: Rs.{totals['cash_received']:,.2f}</div>
+                    <div><i class="fas fa-money-check-alt"></i> Cheque: Rs.{totals['cheque_received']:,.2f}</div>
+                    <div><i class="fas fa-clock"></i> Pending: Rs.{totals['pending_received']:,.2f}</div>
+                </div>
+            </div>
+            
+            <div class="card paid">
+                <div class="card-header">
+                    <div class="card-icon">
+                        <i class="fas fa-arrow-up"></i>
+                    </div>
+                    <div>
+                        <div class="card-title">Total Paid</div>
+                        <div class="card-amount">Rs.{totals['total_paid']:,.2f}</div>
+                    </div>
+                </div>
+                <div class="card-details">
+                    <div><i class="fas fa-coins"></i> Cash: Rs.{totals['cash_paid']:,.2f}</div>
+                    <div><i class="fas fa-money-check-alt"></i> Cheque: Rs.{totals['cheque_paid']:,.2f}</div>
+                    <div><i class="fas fa-clock"></i> Pending: Rs.{totals['pending_paid']:,.2f}</div>
+                </div>
+            </div>
+            
+            <div class="card balance">
+                <div class="card-header">
+                    <div class="card-icon">
+                        <i class="fas fa-balance-scale"></i>
+                    </div>
+                    <div>
+                        <div class="card-title">Net Balance</div>
+                        <div class="card-amount">Rs.{totals['net_balance']:,.2f}</div>
+                    </div>
+                </div>
+                <div class="card-details">
+                    <div><i class="fas fa-info-circle"></i> Received - Paid</div>
+                    <div style="margin-top: 10px;">
+                        {'<span style="color: #28a745;"><i class="fas fa-check-circle"></i> Positive Balance</span>' 
+                         if totals['net_balance'] >= 0 
+                         else '<span style="color: #dc3545;"><i class="fas fa-exclamation-circle"></i> Negative Balance</span>'}
+                    </div>
+                </div>
+            </div>
+        </div>
         
-        <table id="transactions-table">
-            <thead>
-                <tr>
-                    <th>Date</th>
-                    <th>Person</th>
-                    <th>Amount</th>
-                    <th>Type</th>
-                    <th>Method</th>
-                    <th>Reference No.</th>
-                    <th>Status</th>
-                    <th>Cheque Status</th>
-                    <th>Description</th>
-                </tr>
-            </thead>
-            <tbody>"""
+        <div class="filters">
+            <h2 class="section-title">
+                <i class="fas fa-filter"></i> Filters
+            </h2>
+            
+            <div class="filter-grid">
+                <div class="filter-group">
+                    <label for="start-date">Date Range</label>
+                    <input type="date" id="start-date" class="date-filter">
+                    <span style="display: inline-block; margin: 0 5px; font-size: 12px;">to</span>
+                    <input type="date" id="end-date" class="date-filter">
+                </div>
+                
+                <div class="filter-group">
+                    <label for="name-filter">Person</label>
+                    <select id="name-filter">
+                        <option value="">All</option>
+                        {''.join(f'<option value="{name}">{name}</option>' for name in sorted(df['person'].unique()))}
+                    </select>
+                </div>
+                
+                <div class="filter-group">
+                    <label for="type-filter">Transaction Type</label>
+                    <select id="type-filter">
+                        <option value="">All</option>
+                        <option value="paid_to_me">Received</option>
+                        <option value="i_paid">Paid</option>
+                    </select>
+                </div>
+                
+                <div class="filter-group">
+                    <label for="method-filter">Payment Method</label>
+                    <select id="method-filter">
+                        <option value="">All</option>
+                        <option value="cash">Cash</option>
+                        <option value="cheque">Cheque</option>
+                    </select>
+                </div>
+                
+                <div class="filter-group">
+                    <label for="status-filter">Cheque Status</label>
+                    <select id="status-filter">
+                        <option value="">All</option>
+                        <option value="received/given">Received/Given</option>
+                        <option value="processing">Processing</option>
+                        <option value="bounced">Bounced</option>
+                        <option value="processing done">Processing Done</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="filter-actions">
+                <button class="filter-btn" onclick="applyFilters()">
+                    <i class="fas fa-filter"></i> Apply Filters
+                </button>
+                <button class="filter-btn reset-btn" onclick="resetFilters()">
+                    <i class="fas fa-redo"></i> Reset
+                </button>
+            </div>
+        </div>
+        
+        <h2 class="section-title">
+            <i class="fas fa-list"></i> All Transactions
+        </h2>
+        
+        <div class="no-results" id="no-results">
+            <i class="fas fa-search" style="font-size: 24px; margin-bottom: 10px;"></i>
+            <p>No transactions match your filters</p>
+        </div>
+    
+    <table id="transactions-table">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Person</th>
+                <th>Amount</th>
+                <th>Type</th>
+                <th>Method</th>
+                <th>Reference No.</th>
+                <th>Status</th>
+                <th>Cheque Status</th>
+                <th>Description</th>
+            </tr>
+        </thead>
+        <tbody>"""
 
-        # Add transaction rows with data attributes for filtering
+        # Add transaction rows with proper data handling
         for _, row in transactions.iterrows():
-            status_class = row['Status'].lower().replace(' ', '-')
-            cheque_status_class = str(row['Cheque Status']).lower().replace(' ', '-').replace('/', '-')
+            status_class = str(row['Status']).lower().replace(' ', '-') if pd.notna(row['Status']) else ''
+            cheque_status_class = str(row['Cheque Status']).lower().replace(' ', '-').replace('/', '-') if pd.notna(row['Cheque Status']) else ''
             
             html += f"""
                 <tr data-date="{row['Date']}" 
                     data-person="{row['Person']}" 
                     data-type="{'paid_to_me' if row['Type'] == 'Received' else 'i_paid'}" 
-                    data-method="{row['Method'].lower()}" 
-                    data-cheque-status="{row['Cheque Status'].lower() if pd.notna(row['Cheque Status']) else ''}">
+                    data-method="{str(row['Method']).lower()}" 
+                    data-cheque-status="{str(row['Cheque Status']).lower() if pd.notna(row['Cheque Status']) else ''}">
                     <td>{row['formatted_date']}</td>
                     <td>{row['Person']}</td>
                     <td>{row['Amount']}</td>
                     <td>{row['Type']}</td>
-                    <td>{row['Method'].capitalize()}</td>
+                    <td>{str(row['Method']).capitalize()}</td>
                     <td>{row['Reference No.'] if row['Reference No.'] else '-'}</td>
-                    <td><span class="status {status_class}">{row['Status'].capitalize()}</span></td>
-                    <td><span class="status {cheque_status_class}">{row['Cheque Status'] if pd.notna(row['Cheque Status']) else '-'}</span></td>
-                    <td>{row['Description'] if pd.notna(row['Description']) else '-'}</td>
+                    <td><span class="status {status_class}">{str(row['Status']).capitalize() if pd.notna(row['Status']) else '-'}</span></td>
+                    <td><span class="status {cheque_status_class}">{str(row['Cheque Status']).capitalize() if pd.notna(row['Cheque Status']) else '-'}</span></td>
+                    <td>{str(row['Description']) if pd.notna(row['Description']) else '-'}</td>
                 </tr>"""
 
         html += """
@@ -430,6 +811,11 @@ with tab2:
                     st.rerun()
 
         # Edit Form (appears when editing_row_idx is set)
+        # In the View Transactions tab (Tab 2), update the edit form section:
+
+        # Edit Form (appears when editing_row_idx is set)
+        # Inside the View Transactions tab (Tab 2), in the edit form section:
+
         if st.session_state['editing_row_idx'] is not None and st.session_state.get('temp_edit_data'):
             st.markdown("---")
             st.subheader("Edit Transaction Details")
@@ -456,16 +842,19 @@ with tab2:
 
                     edited_reference_number = st.text_input(
                         "Reference Number", 
-                        value=edit_data.get('reference_number', ''), 
+                        value=str(edit_data.get('reference_number', '')),  # Ensure string conversion
                         key='edit_reference_number'
                     )
 
                     if edited_payment_method == "cheque":
+                        cheque_status = edit_data.get('cheque_status', 'processing')
+                        if pd.isna(cheque_status):
+                            cheque_status = 'processing'
                         edited_cheque_status = st.selectbox(
                             "Cheque Status",
                             ["received/given", "processing", "bounced", "processing done"],
                             index=["received/given", "processing", "bounced", "processing done"].index(
-                                edit_data.get('cheque_status', 'processing')
+                                str(cheque_status)  # Ensure string conversion
                             ),
                             key='edit_cheque_status'
                         )
@@ -475,35 +864,51 @@ with tab2:
                 with col2_edit:
                     try:
                         people_df = pd.read_csv(PEOPLE_FILE)
+                        people_list = people_df['name'].dropna().tolist()  # Remove any NaN values
+                        current_person = edit_data['person']
+                        
+                        # Handle case where person might not be in current people list
+                        if pd.isna(current_person) or current_person not in people_list:
+                            if pd.notna(current_person):
+                                people_list = [current_person] + people_list
+                            default_index = 0
+                        else:
+                            default_index = people_list.index(current_person)
+                        
                         edited_person = st.selectbox(
                             "Select Person", 
-                            people_df['name'].tolist(), 
-                            index=people_df['name'].tolist().index(edit_data['person']), 
+                            people_list, 
+                            index=default_index, 
                             key='edit_person'
                         )
                     except Exception as e:
                         st.error(f"Error loading people data: {e}")
                         edited_person = edit_data['person']
 
+                    transaction_status = edit_data.get('transaction_status', 'completed')
                     edited_transaction_status = st.selectbox(
                         "Transaction Status", 
                         ["completed", "pending"], 
-                        index=["completed", "pending"].index(edit_data.get('transaction_status', 'completed')), 
+                        index=["completed", "pending"].index(
+                            str(transaction_status) if pd.notna(transaction_status) else 'completed'
+                        ), 
                         key='edit_transaction_status'
                     )
+                    
                     edited_description = st.text_input(
                         "Description", 
-                        value=edit_data.get('description', ''), 
+                        value=str(edit_data.get('description', '')),  # Ensure string conversion
                         key='edit_description'
                     )
 
-                col_buttons = st.columns(2)
-                with col_buttons[0]:
-                    save_edited = st.form_submit_button("💾 Save Changes")
-                with col_buttons[1]:
-                    cancel_edit = st.form_submit_button("❌ Cancel")
+                # Form submit and cancel buttons
+                col1, col2 = st.columns(2)
+                with col1:
+                    submit_button = st.form_submit_button("💾 Save Changes")
+                with col2:
+                    cancel_button = st.form_submit_button("❌ Cancel")
 
-                if save_edited:
+                if submit_button:
                     if edited_amount <= 0:
                         st.warning("Amount must be greater than 0.")
                     elif not edited_reference_number:
@@ -531,14 +936,15 @@ with tab2:
                             st.rerun()
                         except Exception as e:
                             st.error(f"Error saving transaction: {e}")
-                elif cancel_edit:
+
+                if cancel_button:
                     st.session_state['editing_row_idx'] = None
                     st.session_state['temp_edit_data'] = {}
                     st.rerun()
 
     except Exception as e:
-        st.error(f"Error loading transaction history: {str(e)}")
-        st.stop()
+            st.error(f"Error loading transaction history: {str(e)}")
+            st.stop()
 
 # ------------------ Tab 3: Manage People ------------------
 with tab3:

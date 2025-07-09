@@ -1,2 +1,2 @@
-date,person,amount,type,status,description,payment_method,cheque_status,transaction_status,reference_number
-2025-07-10,Rizwan,125000.0,paid_to_me,completed,Fully paid,cash,12522222,,completed
+date,person,amount,type,status,description,payment_method,cheque_status,transaction_status,reference_number,amount_display,type_display,original_index,formatted_date
+2025-07-10,Rizwan,125000.0,paid_to_me,pending,Fully paid,cash,,pending,completed,,,,
