@@ -3,5 +3,5 @@ date,person,amount,type,status,description,payment_method,cheque_number,cheque_s
 2025-07-09,Shabbir,1500000.0,i_paid,completed,,cheque,5.214525653546531e+16,processing done,completed,,"Rs. 1,500,000.00",Paid,1.0
 2025-07-09,Rizwan,150000.0,paid_to_me,completed,,cheque,3.6518965163531656e+16,received/given,completed,,"Rs. 150,000.00",Received,2.0
 2025-07-09,Rizwan,1500000.0,paid_to_me,completed,,cheque,2516515132.0,processing done,completed,,"Rs. 1,500,000.00",Received,3.0
-2025-07-09,Rizwan,510000.0,paid_to_me,completed,He paid full amount ,cash,,,completed,15205257,,,
-2025-07-10,Rizwan,2154252.0,paid_to_me,completed,All clear,cheque,44612662.0,processing done,completed,,"Rs. 2,154,252.00",Received,5.0
+2025-07-09,Rizwan,510000.0,paid_to_me,completed,He paid full amount ,cash,,,completed,15205257.0,"Rs. 510,000.00",Received,4.0
+2025-07-10,Rizwan,215400.0,paid_to_me,completed,All clear,cheque,44612662.0,processing done,completed,,,,
