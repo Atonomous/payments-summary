@@ -5,3 +5,4 @@ date,person,amount,type,status,description
 2025-07-09,Shabbir,78512.0,i_paid,completed,
 2025-07-09,Shabbir2,8875.0,i_paid,completed,
 2025-07-09,Rizwan,7878.0,paid_to_me,completed,
+2025-07-09,Rizwan,0.0,paid_to_me,completed,
