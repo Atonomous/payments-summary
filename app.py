@@ -12,25 +12,30 @@ SUMMARY_FILE = os.path.join(REPO_PATH, "docs/index.html")
 SUMMARY_URL = "https://atonomous.github.io/payments-summary/"
 
 def init_files():
-    if not os.path.exists(CSV_FILE):
-        pd.DataFrame(columns=[
-            "date", "person", "amount", "type", "status",
-            "description", "payment_method", "cheque_number",
-            "cheque_status", "transaction_status", "receipt_number"
-        ]).to_csv(CSV_FILE, index=False)
-    else:
-        df = pd.read_csv(CSV_FILE)
-        if 'receipt_number' not in df.columns:
-            df['receipt_number'] = ''
-            df.to_csv(CSV_FILE, index=False)
+    try:
+        if not os.path.exists(CSV_FILE):
+            pd.DataFrame(columns=[
+                "date", "person", "amount", "type", "status",
+                "description", "payment_method", "cheque_number",
+                "cheque_status", "transaction_status", "receipt_number"
+            ]).to_csv(CSV_FILE, index=False)
+            st.toast(f"Created new {CSV_FILE}")
+        else:
+            df = pd.read_csv(CSV_FILE)
+            if 'receipt_number' not in df.columns:
+                df['receipt_number'] = ''
+                df.to_csv(CSV_FILE, index=False)
 
-    if not os.path.exists(PEOPLE_FILE):
-        pd.DataFrame(columns=["name", "category"]).to_csv(PEOPLE_FILE, index=False)
-    else:
-        df = pd.read_csv(PEOPLE_FILE)
-        if 'category' not in df.columns:
-            df['category'] = 'client'
-            df.to_csv(PEOPLE_FILE, index=False)
+        if not os.path.exists(PEOPLE_FILE):
+            pd.DataFrame(columns=["name", "category"]).to_csv(PEOPLE_FILE, index=False)
+            st.toast(f"Created new {PEOPLE_FILE}")
+        else:
+            df = pd.read_csv(PEOPLE_FILE)
+            if 'category' not in df.columns:
+                df['category'] = 'client'
+                df.to_csv(PEOPLE_FILE, index=False)
+    except Exception as e:
+        st.error(f"Error initializing files: {e}")
 
 init_files()
 
@@ -1009,7 +1014,6 @@ with tab2:
     except Exception as e:
         st.error(f"Error loading transaction history: {str(e)}")
         st.stop()
-
 # ------------------ Tab 3: Manage People ------------------
 with tab3:
     st.subheader("Manage People")
@@ -1033,20 +1037,17 @@ with tab3:
 
     try:
         ppl = pd.read_csv(PEOPLE_FILE)
-        if not ppl.empty:
-            st.dataframe(ppl, use_container_width=True, hide_index=True)
-            to_del = st.selectbox("Delete Person", ppl['name'])
-            if st.button("Delete"):
-                tx = pd.read_csv(CSV_FILE)
-                if to_del in tx['person'].values:
-                    st.error("Cannot delete person with transactions.")
-                else:
-                    ppl = ppl[ppl['name'] != to_del]
-                    ppl.to_csv(PEOPLE_FILE, index=False)
-                    st.success("Deleted.")
-                    st.rerun()
-        else:
-            st.info("No people records yet.")
+        st.dataframe(ppl, use_container_width=True, hide_index=True)
+        to_del = st.selectbox("Delete Person", ppl['name'] if not ppl.empty else [])
+        if st.button("Delete"):
+            tx = pd.read_csv(CSV_FILE)
+            if to_del in tx['person'].values:
+                st.error("Cannot delete person with transactions.")
+            else:
+                ppl = ppl[ppl['name'] != to_del]
+                ppl.to_csv(PEOPLE_FILE, index=False)
+                st.success("Deleted.")
+                st.rerun()
     except Exception as e:
         st.error(f"Error managing people: {e}")
 
