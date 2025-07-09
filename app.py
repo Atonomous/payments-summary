@@ -45,36 +45,75 @@ def git_push():
         st.error(f"Error updating GitHub: {e}")
 
 def generate_html_summary(df):
+    # Create a copy and ensure proper data types
     df = df.copy()
-    df['amount'] = df['amount'].astype(float)
+    
+    # Convert amounts to float and handle missing values
+    df['amount'] = pd.to_numeric(df['amount'], errors='coerce').fillna(0.0)
+    
+    # Force string type for cheque and receipt numbers
+    df['cheque_number'] = df['cheque_number'].astype(str)
+    df['receipt_number'] = df['receipt_number'].astype(str)
+    
+    # Clean up 'nan' strings and empty values
+    df['cheque_number'] = df['cheque_number'].replace('nan', '').replace('None', '')
+    df['receipt_number'] = df['receipt_number'].replace('nan', '').replace('None', '')
+    
+    # Format cheque numbers to avoid scientific notation
+    def format_cheque_number(num):
+        if num.replace('.', '').isdigit():
+            try:
+                return f"{int(float(num)):,}"  # Adds commas for large numbers
+            except:
+                return num
+        return num
+    
+    df['cheque_number'] = df['cheque_number'].apply(format_cheque_number)
+    
+    # Calculate payment totals
     payment_totals = df.groupby(['type', 'payment_method'])['amount'].sum().unstack().fillna(0)
     
+    # Prepare summary statistics
     totals = {
         'total_received': df[df['type'] == 'paid_to_me']['amount'].sum(),
-        'pending_received': df[(df['type'] == 'paid_to_me') & (df['transaction_status'] == 'pending')]['amount'].sum(),
+        'pending_received': df[(df['type'] == 'paid_to_me') & 
+                              (df['transaction_status'] == 'pending')]['amount'].sum(),
         'total_paid': df[df['type'] == 'i_paid']['amount'].sum(),
-        'pending_paid': df[(df['type'] == 'i_paid') & (df['transaction_status'] == 'pending')]['amount'].sum(),
-        'cash_received': payment_totals.loc['paid_to_me', 'cash'] if 'cash' in payment_totals.columns and 'paid_to_me' in payment_totals.index else 0,
-        'cheque_received': payment_totals.loc['paid_to_me', 'cheque'] if 'cheque' in payment_totals.columns and 'paid_to_me' in payment_totals.index else 0,
-        'cash_paid': payment_totals.loc['i_paid', 'cash'] if 'cash' in payment_totals.columns and 'i_paid' in payment_totals.index else 0,
-        'cheque_paid': payment_totals.loc['i_paid', 'cheque'] if 'cheque' in payment_totals.columns and 'i_paid' in payment_totals.index else 0,
-        'net_balance': df[df['type'] == 'paid_to_me']['amount'].sum() - df[df['type'] == 'i_paid']['amount'].sum()
+        'pending_paid': df[(df['type'] == 'i_paid') & 
+                           (df['transaction_status'] == 'pending')]['amount'].sum(),
+        'cash_received': payment_totals.loc['paid_to_me', 'cash'] 
+                         if 'cash' in payment_totals.columns and 'paid_to_me' in payment_totals.index 
+                         else 0,
+        'cheque_received': payment_totals.loc['paid_to_me', 'cheque'] 
+                           if 'cheque' in payment_totals.columns and 'paid_to_me' in payment_totals.index 
+                           else 0,
+        'cash_paid': payment_totals.loc['i_paid', 'cash'] 
+                      if 'cash' in payment_totals.columns and 'i_paid' in payment_totals.index 
+                      else 0,
+        'cheque_paid': payment_totals.loc['i_paid', 'cheque'] 
+                        if 'cheque' in payment_totals.columns and 'i_paid' in payment_totals.index 
+                        else 0,
+        'net_balance': (df[df['type'] == 'paid_to_me']['amount'].sum() - 
+                       df[df['type'] == 'i_paid']['amount'].sum())
     }
 
+    # Prepare transactions table
     transactions = df.rename(columns={
-        'date': 'Date', 'person': 'Person', 'type': 'Type',
-        'transaction_status': 'Status', 'description': 'Description',
-        'payment_method': 'Method', 'cheque_number': 'Cheque No.',
-        'cheque_status': 'Cheque Status', 'receipt_number': 'Receipt No.'
+        'date': 'Date', 
+        'person': 'Person', 
+        'type': 'Type',
+        'transaction_status': 'Status', 
+        'description': 'Description',
+        'payment_method': 'Method', 
+        'cheque_number': 'Cheque No.',
+        'cheque_status': 'Cheque Status', 
+        'receipt_number': 'Receipt No.'
     })
-    transactions['Amount'] = transactions['amount']
+    
+    transactions['Amount'] = transactions['amount'].apply(lambda x: f"Rs. {x:,.2f}")
     transactions['Type'] = transactions['Type'].map({'paid_to_me': 'Received', 'i_paid': 'Paid'})
     
-    # Format cheque numbers properly
-    transactions['Cheque No.'] = transactions['Cheque No.'].apply(
-        lambda x: f"{int(x):,}" if pd.notna(x) and str(x).replace('.','').isdigit() else str(x)
-    )
-
+    # Generate HTML with premium styling
     html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -174,6 +213,7 @@ def generate_html_summary(df):
             align-items: center;
             justify-content: center;
             margin-right: 15px;
+            font-size: 18px;
         }}
         
         .received .card-icon {{ background-color: rgba(67, 97, 238, 0.1); color: var(--primary); }}
@@ -198,6 +238,18 @@ def generate_html_summary(df):
             margin-top: 10px;
         }}
         
+        .card-details div {{
+            margin-bottom: 5px;
+            display: flex;
+            align-items: center;
+        }}
+        
+        .card-details i {{
+            margin-right: 8px;
+            width: 18px;
+            text-align: center;
+        }}
+        
         .section-title {{
             font-size: 20px;
             font-weight: 600;
@@ -219,6 +271,7 @@ def generate_html_summary(df):
             border-radius: 10px;
             overflow: hidden;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+            margin-bottom: 30px;
         }}
         
         th, td {{
@@ -246,12 +299,15 @@ def generate_html_summary(df):
             border-radius: 20px;
             font-size: 12px;
             font-weight: 500;
+            white-space: nowrap;
         }}
         
         .completed {{ background-color: rgba(40, 167, 69, 0.1); color: #28a745; }}
         .pending {{ background-color: rgba(255, 193, 7, 0.1); color: #ffc107; }}
         .processing {{ background-color: rgba(13, 110, 253, 0.1); color: #0d6efd; }}
         .bounced {{ background-color: rgba(220, 53, 69, 0.1); color: #dc3545; }}
+        .received-given {{ background-color: rgba(108, 117, 125, 0.1); color: #6c757d; }}
+        .processing-done {{ background-color: rgba(25, 135, 84, 0.1); color: #198754; }}
         
         .footer {{
             text-align: center;
@@ -262,13 +318,17 @@ def generate_html_summary(df):
             font-size: 14px;
         }}
         
+        .footer i {{
+            margin: 0 5px;
+        }}
+        
         @media (max-width: 768px) {{
             .summary-cards {{
                 grid-template-columns: 1fr;
             }}
             
             th, td {{
-                padding: 10px 8px;
+                padding: 12px 8px;
                 font-size: 14px;
             }}
         }}
@@ -277,9 +337,13 @@ def generate_html_summary(df):
 <body>
     <div class="container">
         <header>
-            <div class="logo">Payment Tracker</div>
+            <div class="logo">
+                <i class="fas fa-wallet"></i> Payment Tracker
+            </div>
             <h1 class="report-title">Payment Summary Report</h1>
-            <div class="report-date">Generated on {datetime.now().strftime('%B %d, %Y at %I:%M %p')}</div>
+            <div class="report-date">
+                <i class="far fa-calendar-alt"></i> {datetime.now().strftime('%B %d, %Y at %I:%M %p')}
+            </div>
         </header>
         
         <div class="summary-cards">
@@ -330,13 +394,17 @@ def generate_html_summary(df):
                 <div class="card-details">
                     <div><i class="fas fa-info-circle"></i> Received - Paid</div>
                     <div style="margin-top: 10px;">
-                        {f'<span style="color: #28a745;"><i class="fas fa-check-circle"></i> Positive Balance</span>' if totals['net_balance'] >= 0 else '<span style="color: #dc3545;"><i class="fas fa-exclamation-circle"></i> Negative Balance</span>'}
+                        {'<span style="color: #28a745;"><i class="fas fa-check-circle"></i> Positive Balance</span>' 
+                         if totals['net_balance'] >= 0 
+                         else '<span style="color: #dc3545;"><i class="fas fa-exclamation-circle"></i> Negative Balance</span>'}
                     </div>
                 </div>
             </div>
         </div>
         
-        <h2 class="section-title"><i class="fas fa-list"></i> All Transactions</h2>
+        <h2 class="section-title">
+            <i class="fas fa-list"></i> All Transactions
+        </h2>
         
         <table>
             <thead>
@@ -355,21 +423,22 @@ def generate_html_summary(df):
             </thead>
             <tbody>"""
 
+    # Add transaction rows
     for _, row in transactions.iterrows():
-        status_class = row['Status'].lower().replace('/', '-')
+        status_class = row['Status'].lower().replace(' ', '-')
         cheque_status_class = str(row['Cheque Status']).lower().replace(' ', '-').replace('/', '-')
         
         html += f"""
                 <tr>
                     <td>{row['Date']}</td>
                     <td>{row['Person']}</td>
-                    <td>Rs.{row['Amount']:,.2f}</td>
+                    <td>{row['Amount']}</td>
                     <td>{row['Type']}</td>
                     <td>{row['Method'].capitalize()}</td>
-                    <td>{row.get('Cheque No.', '-')}</td>
-                    <td>{row.get('Receipt No.', '-')}</td>
+                    <td>{row['Cheque No.'] if row['Cheque No.'] else '-'}</td>
+                    <td>{row['Receipt No.'] if row['Receipt No.'] else '-'}</td>
                     <td><span class="status {status_class}">{row['Status'].capitalize()}</span></td>
-                    <td><span class="status {cheque_status_class}">{row.get('Cheque Status', '-')}</span></td>
+                    <td><span class="status {cheque_status_class}">{row['Cheque Status'] if pd.notna(row['Cheque Status']) else '-'}</span></td>
                     <td>{row['Description'] if pd.notna(row['Description']) else '-'}</td>
                 </tr>"""
 
@@ -378,13 +447,14 @@ def generate_html_summary(df):
         </table>
         
         <div class="footer">
-            <p>This report was automatically generated by Payment Tracker System</p>
+            <p><i class="fas fa-file-alt"></i> This report was automatically generated by Payment Tracker System</p>
             <p><i class="far fa-copyright"></i> {datetime.now().year} All Rights Reserved</p>
         </div>
     </div>
 </body>
 </html>"""
 
+    # Save the HTML file
     os.makedirs(os.path.dirname(SUMMARY_FILE), exist_ok=True)
     with open(SUMMARY_FILE, "w", encoding="utf-8") as f:
         f.write(html)
