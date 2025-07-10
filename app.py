@@ -11,6 +11,10 @@ PEOPLE_FILE = os.path.join(REPO_PATH, "people.csv")
 SUMMARY_FILE = os.path.join(REPO_PATH, "docs/index.html")
 SUMMARY_URL = "https://atonomous.github.io/payments-summary/"
 
+# Define valid status lists globally so they are accessible everywhere
+valid_cheque_statuses_lower = ["received/given", "processing", "bounced", "processing done"]
+valid_transaction_statuses_lower = ["completed", "pending"]
+
 def init_files():
     try:
         # Initialize payments.csv if it doesn't exist
@@ -34,7 +38,7 @@ def init_files():
                 df = df.drop(columns=['receipt_number', 'cheque_number'], errors='ignore')
                 df.to_csv(CSV_FILE, index=False)
 
-        # Initialize people.csv if it doesn't exist
+        # Initialize people.csv if it doesn.t exist
         if not os.path.exists(PEOPLE_FILE):
             pd.DataFrame(columns=["name", "category"]).to_csv(PEOPLE_FILE, index=False)
             st.toast(f"Created new {PEOPLE_FILE}")
@@ -80,9 +84,6 @@ def prepare_dataframe_for_display(df):
     
     # Format dates as day-month-year
     df_display['formatted_date'] = pd.to_datetime(df_display['date']).dt.strftime('%d-%m-%Y')
-
-    valid_cheque_statuses_lower = ["received/given", "processing", "bounced", "processing done"]
-    valid_transaction_statuses_lower = ["completed", "pending"]
 
     # Validate and format 'cheque_status' for display
     df_display['cheque_status_display'] = df_display.apply(lambda row: 
