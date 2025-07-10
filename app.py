@@ -413,6 +413,93 @@ def generate_html_summary(df):
             }}
         }}
     </style>
+	<script>
+        function applyFilters() {{
+            const startDate = $('#start-date').val();
+            const endDate = $('#end-date').val();
+            const person = $('#name-filter').val().toLowerCase();
+            const type = $('#type-filter').val();
+            const method = $('#method-filter').val();
+            const chequeStatus = $('#status-filter').val().toLowerCase();
+            
+            let visibleRows = 0;
+            
+            $('#transactions-table tbody tr').each(function() {{
+                const rowDate = $(this).data('date');
+                const rowPerson = $(this).data('person').toString().toLowerCase();
+                const rowType = $(this).data('type');
+                const rowMethod = $(this).data('method').toString().toLowerCase();
+                const rowChequeStatus = $(this).data('cheque-status').toString().toLowerCase();
+                
+                // Date filter
+                const datePass = !startDate || !endDate || 
+                               (rowDate >= startDate && rowDate <= endDate);
+                
+                // Person filter
+                const personPass = !person || rowPerson.includes(person);
+                
+                // Type filter
+                const typePass = !type || rowType === type;
+                
+                // Method filter
+                const methodPass = !method || rowMethod === method.toLowerCase();
+                
+                // Cheque status filter
+                const chequeStatusPass = !chequeStatus || 
+                                      (rowChequeStatus && rowChequeStatus.includes(chequeStatus));
+                
+                if (datePass && personPass && typePass && methodPass && chequeStatusPass) {{
+                    $(this).show();
+                    visibleRows++;
+                }} else {{
+                    $(this).hide();
+                }}
+            }});
+            
+            // Show/hide no results message
+            if (visibleRows === 0) {{
+                $('#no-results').show();
+                $('#transactions-table').hide();
+            }} else {{
+                $('#no-results').hide();
+                $('#transactions-table').show();
+            }}
+        }}
+        
+        function resetFilters() {{
+            $('.filter-group select').val('');
+            $('.date-filter').val('');
+            $('#transactions-table tbody tr').show();
+            $('#no-results').hide();
+            $('#transactions-table').show();
+            // Reset to default date range
+            const today = new Date();
+            const oneMonthAgo = new Date();
+            oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+            $('#start-date').val(oneMonthAgo.toISOString().split('T')[0]);
+            $('#end-date').val(today.toISOString().split('T')[0]);
+        }}
+        
+        // Initialize date pickers with reasonable defaults
+        $(document).ready(function() {{
+            const today = new Date();
+            const oneMonthAgo = new Date();
+            oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+            
+            $('#start-date').val(oneMonthAgo.toISOString().split('T')[0]);
+            $('#end-date').val(today.toISOString().split('T')[0]);
+            
+            // Apply filters when dropdowns change
+            $('.filter-group select').change(function() {{
+                applyFilters();
+            }});
+            
+            // Apply filters when date inputs change
+            $('.date-filter').change(function() {{
+                applyFilters();
+            }});
+        }});
+    </script>
 </head>
 <body>
     <div class="container">

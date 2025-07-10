@@ -291,6 +291,93 @@
             }
         }
     </style>
+	<script>
+        function applyFilters() {
+            const startDate = $('#start-date').val();
+            const endDate = $('#end-date').val();
+            const person = $('#name-filter').val().toLowerCase();
+            const type = $('#type-filter').val();
+            const method = $('#method-filter').val();
+            const chequeStatus = $('#status-filter').val().toLowerCase();
+            
+            let visibleRows = 0;
+            
+            $('#transactions-table tbody tr').each(function() {
+                const rowDate = $(this).data('date');
+                const rowPerson = $(this).data('person').toString().toLowerCase();
+                const rowType = $(this).data('type');
+                const rowMethod = $(this).data('method').toString().toLowerCase();
+                const rowChequeStatus = $(this).data('cheque-status').toString().toLowerCase();
+                
+                // Date filter
+                const datePass = !startDate || !endDate || 
+                               (rowDate >= startDate && rowDate <= endDate);
+                
+                // Person filter
+                const personPass = !person || rowPerson.includes(person);
+                
+                // Type filter
+                const typePass = !type || rowType === type;
+                
+                // Method filter
+                const methodPass = !method || rowMethod === method.toLowerCase();
+                
+                // Cheque status filter
+                const chequeStatusPass = !chequeStatus || 
+                                      (rowChequeStatus && rowChequeStatus.includes(chequeStatus));
+                
+                if (datePass && personPass && typePass && methodPass && chequeStatusPass) {
+                    $(this).show();
+                    visibleRows++;
+                } else {
+                    $(this).hide();
+                }
+            });
+            
+            // Show/hide no results message
+            if (visibleRows === 0) {
+                $('#no-results').show();
+                $('#transactions-table').hide();
+            } else {
+                $('#no-results').hide();
+                $('#transactions-table').show();
+            }
+        }
+        
+        function resetFilters() {
+            $('.filter-group select').val('');
+            $('.date-filter').val('');
+            $('#transactions-table tbody tr').show();
+            $('#no-results').hide();
+            $('#transactions-table').show();
+            // Reset to default date range
+            const today = new Date();
+            const oneMonthAgo = new Date();
+            oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+            $('#start-date').val(oneMonthAgo.toISOString().split('T')[0]);
+            $('#end-date').val(today.toISOString().split('T')[0]);
+        }
+        
+        // Initialize date pickers with reasonable defaults
+        $(document).ready(function() {
+            const today = new Date();
+            const oneMonthAgo = new Date();
+            oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+            
+            $('#start-date').val(oneMonthAgo.toISOString().split('T')[0]);
+            $('#end-date').val(today.toISOString().split('T')[0]);
+            
+            // Apply filters when dropdowns change
+            $('.filter-group select').change(function() {
+                applyFilters();
+            });
+            
+            // Apply filters when date inputs change
+            $('.date-filter').change(function() {
+                applyFilters();
+            });
+        });
+    </script>
 </head>
 <body>
     <div class="container">
@@ -300,7 +387,7 @@
             </div>
             <h1 class="report-title">Payment Summary Report</h1>
             <div class="report-date">
-                <i class="far fa-calendar-alt"></i> July 10, 2025 at 01:58 AM
+                <i class="far fa-calendar-alt"></i> July 10, 2025 at 10:05 AM
             </div>
         </header>
         
@@ -312,11 +399,11 @@
                     </div>
                     <div>
                         <div class="card-title">Total Received</div>
-                        <div class="card-amount">Rs.125,000.00</div>
+                        <div class="card-amount">Rs.2,214,976,485.00</div>
                     </div>
                 </div>
                 <div class="card-details">
-                    <div><i class="fas fa-coins"></i> Cash: Rs.125,000.00</div>
+                    <div><i class="fas fa-coins"></i> Cash: Rs.2,214,976,485.00</div>
                     <div><i class="fas fa-money-check-alt"></i> Cheque: Rs.0.00</div>
                     <div><i class="fas fa-clock"></i> Pending: Rs.125,000.00</div>
                 </div>
@@ -346,7 +433,7 @@
                     </div>
                     <div>
                         <div class="card-title">Net Balance</div>
-                        <div class="card-amount">Rs.125,000.00</div>
+                        <div class="card-amount">Rs.2,214,976,485.00</div>
                     </div>
                 </div>
                 <div class="card-details">
@@ -457,6 +544,21 @@
                     <td><span class="status pending">Pending</span></td>
                     <td><span class="status "></span></td>
                     <td>Fully paid</td>
+                </tr>
+                <tr data-date="2025-07-10" 
+                    data-person="Rizwan" 
+                    data-type="paid_to_me" 
+                    data-method="cash" 
+                    data-cheque-status="36363252.0">
+                    <td>10-07-2025</td>
+                    <td>Rizwan</td>
+                    <td>Rs. 2,214,851,485.00</td>
+                    <td>Received</td>
+                    <td>Cash</td>
+                    <td>completed</td>
+                    <td><span class="status ">-</span></td>
+                    <td><span class="status 36363252.0">36363252.0</span></td>
+                    <td>testing testing 124</td>
                 </tr>
             </tbody>
         </table>
