@@ -344,21 +344,20 @@
             const endDate = $('#end-date').val();
             const person = $('#name-filter').val().toLowerCase();
             const type = $('#type-filter').val();
-            const method = $('#method-filter').val().toLowerCase(); // Changed to lowercase for comparison
+            const method = $('#method-filter').val().toLowerCase(); 
             const chequeStatus = $('#status-filter').val().toLowerCase();
             
             let visibleRows = 0;
             
             $('#transactions-table tbody tr').each(function() {
-                const rowDate = $(this).data('date');
+                const rowDate = $(this).data('date'); // This will be YYYY-MM-DD
                 const rowPerson = $(this).data('person').toString().toLowerCase();
                 const rowType = $(this).data('type');
                 const rowMethod = $(this).data('method').toString().toLowerCase();
                 const rowChequeStatus = $(this).data('cheque-status').toString().toLowerCase();
                 
-                // Date filter
-                const datePass = !startDate || !endDate || 
-                               (rowDate >= startDate && rowDate <= endDate);
+                // Date filter: Compare YYYY-MM-DD strings directly
+                const datePass = (!startDate || rowDate >= startDate) && (!endDate || rowDate <= endDate);
                 
                 // Person filter
                 const personPass = !person || rowPerson.includes(person);
@@ -367,7 +366,7 @@
                 const typePass = !type || rowType === type;
                 
                 // Method filter
-                const methodPass = !method || rowMethod === method; // Compare lowercase values
+                const methodPass = !method || rowMethod === method; 
                 
                 // Cheque status filter
                 const chequeStatusPass = !chequeStatus || 
@@ -423,6 +422,9 @@
             $('.date-filter').change(function() {
                 applyFilters();
             });
+            
+            // Initial filter application on load
+            applyFilters(); 
         });
     </script>
 </head>
@@ -434,7 +436,7 @@
             </div>
             <h1 class="report-title">Payment Summary Report</h1>
             <div class="report-date">
-                <i class="far fa-calendar-alt"></i> July 10, 2025 at 10:49 AM
+                <i class="far fa-calendar-alt"></i> July 10, 2025 at 05:18 PM
             </div>
         </header>
         
@@ -577,12 +579,12 @@
                 </tr>
             </thead>
             <tbody>
-                <tr data-date="10-07-2025" 
+                <tr data-date="2025-07-10" 
                     data-person="Rizwan" 
                     data-type="paid_to_me" 
                     data-method="cash" 
                     data-cheque-status="">
-                    <td>10-07-2025</td>
+                    <td>2025-07-10</td>
                     <td>Rizwan</td>
                     <td>Rs. 125,000.00</td>
                     <td>Received</td>
@@ -592,12 +594,12 @@
                     <td><span class="status pending">Pending</span></td>
                     <td>Fully paid</td>
                 </tr>
-                <tr data-date="10-07-2025" 
+                <tr data-date="2025-07-10" 
                     data-person="Rizwan" 
                     data-type="paid_to_me" 
                     data-method="cash" 
                     data-cheque-status="">
-                    <td>10-07-2025</td>
+                    <td>2025-07-10</td>
                     <td>Rizwan</td>
                     <td>Rs. 2,214,885.00</td>
                     <td>Received</td>
@@ -607,12 +609,12 @@
                     <td><span class="status completed">Completed</span></td>
                     <td>testing testing 124</td>
                 </tr>
-                <tr data-date="10-07-2025" 
+                <tr data-date="2025-07-10" 
                     data-person="Shabbir" 
                     data-type="i_paid" 
                     data-method="cash" 
                     data-cheque-status="">
-                    <td>10-07-2025</td>
+                    <td>2025-07-10</td>
                     <td>Shabbir</td>
                     <td>Rs. 221,500.00</td>
                     <td>Paid</td>
@@ -622,19 +624,19 @@
                     <td><span class="status completed">Completed</span></td>
                     <td>To the vendor</td>
                 </tr>
-                <tr data-date="10-07-2025" 
+                <tr data-date="2025-07-10" 
                     data-person="Shabbir" 
                     data-type="i_paid" 
                     data-method="cheque" 
-                    data-cheque-status="259626956.0">
-                    <td>10-07-2025</td>
+                    data-cheque-status="processing">
+                    <td>2025-07-10</td>
                     <td>Shabbir</td>
                     <td>Rs. 1,230,000.00</td>
                     <td>Paid</td>
                     <td>Cheque</td>
-                    <td><span class="status ">-</span></td>
+                    <td><span class="status processing">Processing</span></td>
                     <td>-</td>
-                    <td><span class="status ">-</span></td>
+                    <td><span class="status completed">Completed</span></td>
                     <td>-</td>
                 </tr>
             </tbody>

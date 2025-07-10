@@ -82,8 +82,8 @@ def prepare_dataframe_for_display(df):
     # Convert amount to float and handle missing values for calculations
     df_display['amount'] = pd.to_numeric(df_display['amount'], errors='coerce').fillna(0.0)
     
-    # Format dates as day-month-year
-    df_display['formatted_date'] = pd.to_datetime(df_display['date']).dt.strftime('%d-%m-%Y')
+    # Format dates as YYYY-MM-DD for consistency with HTML date input and JavaScript comparison
+    df_display['formatted_date'] = pd.to_datetime(df_display['date']).dt.strftime('%Y-%m-%d')
 
     # Validate and format 'cheque_status' for display
     df_display['cheque_status_display'] = df_display.apply(lambda row: 
@@ -495,21 +495,20 @@ def generate_html_summary(df):
             const endDate = $('#end-date').val();
             const person = $('#name-filter').val().toLowerCase();
             const type = $('#type-filter').val();
-            const method = $('#method-filter').val().toLowerCase(); // Changed to lowercase for comparison
+            const method = $('#method-filter').val().toLowerCase(); 
             const chequeStatus = $('#status-filter').val().toLowerCase();
             
             let visibleRows = 0;
             
             $('#transactions-table tbody tr').each(function() {{
-                const rowDate = $(this).data('date');
+                const rowDate = $(this).data('date'); // This will be YYYY-MM-DD
                 const rowPerson = $(this).data('person').toString().toLowerCase();
                 const rowType = $(this).data('type');
                 const rowMethod = $(this).data('method').toString().toLowerCase();
                 const rowChequeStatus = $(this).data('cheque-status').toString().toLowerCase();
                 
-                // Date filter
-                const datePass = !startDate || !endDate || 
-                               (rowDate >= startDate && rowDate <= endDate);
+                // Date filter: Compare YYYY-MM-DD strings directly
+                const datePass = (!startDate || rowDate >= startDate) && (!endDate || rowDate <= endDate);
                 
                 // Person filter
                 const personPass = !person || rowPerson.includes(person);
@@ -518,7 +517,7 @@ def generate_html_summary(df):
                 const typePass = !type || rowType === type;
                 
                 // Method filter
-                const methodPass = !method || rowMethod === method; // Compare lowercase values
+                const methodPass = !method || rowMethod === method; 
                 
                 // Cheque status filter
                 const chequeStatusPass = !chequeStatus || 
@@ -574,6 +573,9 @@ def generate_html_summary(df):
             $('.date-filter').change(function() {{
                 applyFilters();
             }});
+            
+            // Initial filter application on load
+            applyFilters(); 
         }});
     </script>
 </head>
