@@ -58,36 +58,79 @@ def git_push():
     except Exception as e:
         st.error(f"Error updating GitHub: {e}")
 
+def prepare_dataframe_for_display(df):
+    """
+    Prepares the DataFrame for display by ensuring correct data types,
+    handling missing values, and validating/formatting specific columns.
+    This function creates new columns for display purposes without altering
+    the original DataFrame's data.
+    """
+    df_display = df.copy()
+
+    # Ensure columns are strings and handle common NaN/None representations
+    for col in ['reference_number', 'cheque_status', 'transaction_status', 'payment_method', 'description', 'person']:
+        if col in df_display.columns:
+            # Apply .str.strip() to handle Series of strings
+            df_display[col] = df_display[col].astype(str).replace('nan', '').replace('None', '').str.strip()
+        else:
+            df_display[col] = '' # Add missing column if it doesn't exist
+
+    # Convert amount to float and handle missing values for calculations
+    df_display['amount'] = pd.to_numeric(df_display['amount'], errors='coerce').fillna(0.0)
+    
+    # Format dates as day-month-year
+    df_display['formatted_date'] = pd.to_datetime(df_display['date']).dt.strftime('%d-%m-%Y')
+
+    valid_cheque_statuses_lower = ["received/given", "processing", "bounced", "processing done"]
+    valid_transaction_statuses_lower = ["completed", "pending"]
+
+    # Validate and format 'cheque_status' for display
+    df_display['cheque_status_display'] = df_display.apply(lambda row: 
+        str(row['cheque_status']).capitalize() if row['payment_method'].lower() == 'cheque' and str(row['cheque_status']).lower() in valid_cheque_statuses_lower else '-',
+        axis=1
+    )
+
+    # Validate and format 'transaction_status' for display
+    df_display['transaction_status_display'] = df_display.apply(lambda row:
+        str(row['transaction_status']).capitalize() if str(row['transaction_status']).lower() in valid_transaction_statuses_lower else '-',
+        axis=1
+    )
+
+    # Format 'reference_number' for display:
+    # Show if not empty and not a transaction status
+    df_display['reference_number_display'] = df_display.apply(lambda row:
+        str(row['reference_number']) if row['reference_number'] != '' and row['reference_number'].lower() not in valid_transaction_statuses_lower else '-',
+        axis=1
+    )
+    
+    # Format amount for display
+    df_display['amount_display'] = df_display['amount'].apply(lambda x: f"Rs. {x:,.2f}")
+    
+    # Format type for display
+    df_display['type_display'] = df_display['type'].map({'paid_to_me': 'Received', 'i_paid': 'Paid'})
+    
+    return df_display
+
 def generate_html_summary(df):
     try:
-        # Create a copy and ensure proper data types
-        df = df.copy()
+        # Prepare DataFrame for HTML display
+        transactions_display = prepare_dataframe_for_display(df)
         
-        # Convert amounts to float and handle missing values
-        df['amount'] = pd.to_numeric(df['amount'], errors='coerce').fillna(0.0)
-        
-        # Format dates as day-month-year
-        df['formatted_date'] = pd.to_datetime(df['date']).dt.strftime('%d-%m-%Y')
-        
-        # Ensure reference_number remains as string
-        df['reference_number'] = df['reference_number'].astype(str)
-        df['reference_number'] = df['reference_number'].replace('nan', '').replace('None', '')
-        
-        # Ensure cheque_status remains as string
-        df['cheque_status'] = df['cheque_status'].astype(str)
-        df['cheque_status'] = df['cheque_status'].replace('nan', '').replace('None', '')
-        
-        # Calculate payment totals
-        payment_totals = df.groupby(['type', 'payment_method'])['amount'].sum().unstack().fillna(0)
+        # Calculate payment totals from the original (unmodified) DataFrame for accuracy
+        # (or from df_display if amount column is guaranteed correct)
+        df_for_totals = df.copy()
+        df_for_totals['amount'] = pd.to_numeric(df_for_totals['amount'], errors='coerce').fillna(0.0)
+
+        payment_totals = df_for_totals.groupby(['type', 'payment_method'])['amount'].sum().unstack().fillna(0)
         
         # Prepare summary statistics
         totals = {
-            'total_received': df[df['type'] == 'paid_to_me']['amount'].sum(),
-            'pending_received': df[(df['type'] == 'paid_to_me') & 
-                                  (df['transaction_status'] == 'pending')]['amount'].sum(),
-            'total_paid': df[df['type'] == 'i_paid']['amount'].sum(),
-            'pending_paid': df[(df['type'] == 'i_paid') & 
-                               (df['transaction_status'] == 'pending')]['amount'].sum(),
+            'total_received': df_for_totals[df_for_totals['type'] == 'paid_to_me']['amount'].sum(),
+            'pending_received': df_for_totals[(df_for_totals['type'] == 'paid_to_me') & 
+                                  (df_for_totals['transaction_status'] == 'pending')]['amount'].sum(),
+            'total_paid': df_for_totals[df_for_totals['type'] == 'i_paid']['amount'].sum(),
+            'pending_paid': df_for_totals[(df_for_totals['type'] == 'i_paid') & 
+                               (df_for_totals['transaction_status'] == 'pending')]['amount'].sum(),
             'cash_received': payment_totals.loc['paid_to_me', 'cash'] 
                              if 'cash' in payment_totals.columns and 'paid_to_me' in payment_totals.index 
                              else 0,
@@ -100,24 +143,9 @@ def generate_html_summary(df):
             'cheque_paid': payment_totals.loc['i_paid', 'cheque'] 
                             if 'cheque' in payment_totals.columns and 'i_paid' in payment_totals.index 
                             else 0,
-            'net_balance': (df[df['type'] == 'paid_to_me']['amount'].sum() - 
-                           df[df['type'] == 'i_paid']['amount'].sum())
+            'net_balance': (df_for_totals[df_for_totals['type'] == 'paid_to_me']['amount'].sum() - 
+                           df_for_totals[df_for_totals['type'] == 'i_paid']['amount'].sum())
         }
-
-        # Prepare transactions table with correct column mapping
-        transactions = df.rename(columns={
-            'date': 'Date', 
-            'person': 'Person', 
-            'type': 'Type',
-            'transaction_status': 'Status',  # This is the actual status column
-            'description': 'Description',
-            'payment_method': 'Method', 
-            'reference_number': 'Reference No.',  # Correct column for reference numbers
-            'cheque_status': 'Cheque Status'  # Correct column for cheque status
-        })
-        
-        transactions['Amount'] = transactions['amount'].apply(lambda x: f"Rs. {x:,.2f}")
-        transactions['Type'] = transactions['Type'].map({'paid_to_me': 'Received', 'i_paid': 'Paid'})
 
         # Generate HTML with premium styling and filters
         html = f"""<!DOCTYPE html>
@@ -454,9 +482,9 @@ def generate_html_summary(df):
             td:nth-of-type(3):before {{ content: "Amount"; }}
             td:nth-of-type(4):before {{ content: "Type"; }}
             td:nth-of-type(5):before {{ content: "Method"; }}
-            td:nth-of-type(6):before {{ content: "Reference No."; }}
-            td:nth-of-type(7):before {{ content: "Status"; }}
-            td:nth-of-type(8):before {{ content: "Cheque Status"; }}
+            td:nth-of-type(6):before {{ content: "Cheque Status"; }}
+            td:nth-of-type(7):before {{ content: "Reference No."; }}
+            td:nth-of-type(8):before {{ content: "Status"; }}
             td:nth-of-type(9):before {{ content: "Description"; }}
         }}
     </style>
@@ -466,7 +494,7 @@ def generate_html_summary(df):
             const endDate = $('#end-date').val();
             const person = $('#name-filter').val().toLowerCase();
             const type = $('#type-filter').val();
-            const method = $('#method-filter').val();
+            const method = $('#method-filter').val().toLowerCase(); // Changed to lowercase for comparison
             const chequeStatus = $('#status-filter').val().toLowerCase();
             
             let visibleRows = 0;
@@ -489,7 +517,7 @@ def generate_html_summary(df):
                 const typePass = !type || rowType === type;
                 
                 // Method filter
-                const methodPass = !method || rowMethod === method.toLowerCase();
+                const methodPass = !method || rowMethod === method; // Compare lowercase values
                 
                 // Cheque status filter
                 const chequeStatusPass = !chequeStatus || 
@@ -702,26 +730,27 @@ def generate_html_summary(df):
             </thead>
             <tbody>"""
 
-        # Add transaction rows with correct column data
-        for _, row in transactions.iterrows():
-            status_class = str(row['Status']).lower().replace(' ', '-') if pd.notna(row['Status']) else ''
-            cheque_status_class = str(row['Cheque Status']).lower().replace(' ', '-').replace('/', '-') if pd.notna(row['Cheque Status']) else ''
+        # Add transaction rows with correct column data using the prepared DataFrame
+        for _, row in transactions_display.iterrows():
+            # Use the _display columns for values and classes
+            cheque_status_class = str(row['cheque_status_display']).lower().replace(' ', '-').replace('/', '-') if row['cheque_status_display'] != '-' else ''
+            status_class = str(row['transaction_status_display']).lower().replace(' ', '-') if row['transaction_status_display'] != '-' else ''
             
             html += f"""
-                <tr data-date="{row['Date']}" 
-                    data-person="{row['Person']}" 
-                    data-type="{'paid_to_me' if row['Type'] == 'Received' else 'i_paid'}" 
-                    data-method="{str(row['Method']).lower()}" 
-                    data-cheque-status="{str(row['Cheque Status']).lower() if pd.notna(row['Cheque Status']) else ''}">
+                <tr data-date="{row['formatted_date']}" 
+                    data-person="{row['person']}" 
+                    data-type="{row['type']}" 
+                    data-method="{str(row['payment_method']).lower()}" 
+                    data-cheque-status="{str(row['cheque_status']).lower() if pd.notna(row['cheque_status']) else ''}">
                     <td>{row['formatted_date']}</td>
-                    <td>{row['Person']}</td>
-                    <td>{row['Amount']}</td>
-                    <td>{row['Type']}</td>
-                    <td>{str(row['Method']).capitalize()}</td>
-                    <td><span class="status {cheque_status_class}">{str(row['Cheque Status']).capitalize() if pd.notna(row['Cheque Status']) else '-'}</span></td> <!-- Swapped positions -->
-                    <td>{row['Reference No.'] if row['Reference No.'] else '-'}</td> <!-- Swapped positions -->
-                    <td><span class="status {status_class}">{str(row['Status']).capitalize() if pd.notna(row['Status']) else '-'}</span></td>
-                    <td>{str(row['Description']) if pd.notna(row['Description']) else '-'}</td>
+                    <td>{row['person']}</td>
+                    <td>{row['amount_display']}</td>
+                    <td>{row['type_display']}</td>
+                    <td>{str(row['payment_method']).capitalize()}</td>
+                    <td><span class="status {cheque_status_class}">{row['cheque_status_display']}</span></td>
+                    <td>{row['reference_number_display']}</td>
+                    <td><span class="status {status_class}">{row['transaction_status_display']}</span></td>
+                    <td>{row['description'] if row['description'] else '-'}</td>
                 </tr>"""
 
         html += """
@@ -848,7 +877,9 @@ with tab1:
                         "transaction_status": status
                     }
                     pd.DataFrame([new_row]).to_csv(CSV_FILE, mode='a', header=False, index=False)
-                    generate_html_summary(pd.read_csv(CSV_FILE))
+                    # Read the updated CSV and prepare for HTML summary
+                    updated_df = pd.read_csv(CSV_FILE)
+                    generate_html_summary(updated_df)
                     git_push()
                     st.success("Transaction added successfully.")
                     reset_form_session_state_for_add_transaction()
@@ -868,23 +899,10 @@ with tab2:
             st.info("No transactions recorded yet.")
             st.stop()
             
-        # Ensure required columns exist
-        required_columns = ['date', 'person', 'amount', 'type', 'payment_method',
-                         'transaction_status', 'cheque_status', 'description', 'reference_number']
+        # Prepare DataFrame for display, which includes validation and formatting
+        filtered_df = prepare_dataframe_for_display(df)
         
-        missing_cols = [col for col in required_columns if col not in df.columns]
-        if missing_cols:
-            st.error(f"Missing required columns in data: {', '.join(missing_cols)}")
-            st.stop()
-            
-        # Convert amount to float and handle missing values
-        df['amount'] = pd.to_numeric(df['amount'], errors='coerce').fillna(0.0)
-        df['amount_display'] = df['amount'].apply(lambda x: f"Rs. {x:,.2f}")
-        df['type_display'] = df['type'].map({'paid_to_me': 'Received', 'i_paid': 'Paid'})
-        df['original_index'] = df.index
-        df['formatted_date'] = pd.to_datetime(df['date']).dt.strftime('%d-%m-%Y')
-
-        # Filters
+        # Filters (apply filters on the original columns, then display with _display columns)
         col1, col2, col3 = st.columns(3)
         with col1:
             view_filter = st.radio("Filter by Type", ["All", "Received", "Paid"], horizontal=True)
@@ -893,19 +911,23 @@ with tab2:
         with col3:
             status_filter = st.selectbox("Status", ["All", "Completed", "Pending", "Received/Given", "Processing", "Bounced", "Processing Done"])
 
-        # Apply filters
-        filtered_df = df.copy()
+        # Apply filters to the original columns for accurate filtering logic
+        temp_filtered_df = df.copy() # Use original df for filtering
         if view_filter != "All":
-            filtered_df = filtered_df[filtered_df['type_display'] == view_filter]
+            temp_filtered_df = temp_filtered_df[temp_filtered_df['type'].map({'paid_to_me': 'Received', 'i_paid': 'Paid'}) == view_filter]
         if method_filter != "All":
-            filtered_df = filtered_df[filtered_df['payment_method'] == method_filter.lower()]
+            temp_filtered_df = temp_filtered_df[temp_filtered_df['payment_method'].str.lower() == method_filter.lower()]
         if status_filter != "All":
-            if status_filter in ["Completed", "Pending"]:
-                filtered_df = filtered_df[filtered_df['transaction_status'] == status_filter.lower()]
+            if status_filter.lower() in ["completed", "pending"]:
+                temp_filtered_df = temp_filtered_df[temp_filtered_df['transaction_status'].str.lower() == status_filter.lower()]
             else:
-                filtered_df = filtered_df[filtered_df['cheque_status'].str.lower() == status_filter.lower()]
+                temp_filtered_df = temp_filtered_df[temp_filtered_df['cheque_status'].str.lower() == status_filter.lower()]
 
-        # Display DataFrame with clearer column names
+        # Now apply the display preparation to the filtered data
+        filtered_df_for_display = prepare_dataframe_for_display(temp_filtered_df)
+        filtered_df_for_display['original_index'] = temp_filtered_df.index # Keep original index for editing
+
+        # Display DataFrame with clearer column names using the _display columns
         display_columns = {
             'original_index': 'ID',
             'formatted_date': 'Date',
@@ -913,25 +935,25 @@ with tab2:
             'amount_display': 'Amount',
             'type_display': 'Type',
             'payment_method': 'Method',
-            'cheque_status': 'Cheque Status', # Swapped positions
-            'reference_number': 'Reference No.', # Swapped positions
-            'transaction_status': 'Status',
+            'cheque_status_display': 'Cheque Status', # Using validated display column
+            'reference_number_display': 'Reference No.', # Using validated display column
+            'transaction_status_display': 'Status', # Using validated display column
             'description': 'Description'
         }
         
         st.dataframe(
-            filtered_df[list(display_columns.keys())].rename(columns=display_columns),
+            filtered_df_for_display[list(display_columns.keys())].rename(columns=display_columns),
             use_container_width=True,
             hide_index=True
         )
 
         # Edit Section
-        if not filtered_df.empty:
+        if not filtered_df_for_display.empty: # Use filtered_df_for_display for options
             st.markdown("---")
             st.subheader("Edit Transaction")
             
-            edit_options = [f"ID: {idx} - {row['formatted_date']} - {row['person']} - Rs.{row['amount']:,.2f}" 
-                           for idx, row in filtered_df.iterrows()]
+            edit_options = [f"ID: {row['original_index']} - {row['formatted_date']} - {row['person']} - {row['amount_display']}" 
+                           for idx, row in filtered_df_for_display.iterrows()]
             
             selected_edit_option = st.selectbox(
                 "Select transaction to edit:", 
@@ -948,11 +970,6 @@ with tab2:
                     st.rerun()
 
         # Edit Form (appears when editing_row_idx is set)
-        # In the View Transactions tab (Tab 2), update the edit form section:
-
-        # Edit Form (appears when editing_row_idx is set)
-        # Inside the View Transactions tab (Tab 2), in the edit form section:
-
         if st.session_state['editing_row_idx'] is not None and st.session_state.get('temp_edit_data'):
             st.markdown("---")
             st.subheader("Edit Transaction Details")
@@ -979,8 +996,8 @@ with tab2:
                     
                     if edited_payment_method == "cheque":
                         cheque_status = edit_data.get('cheque_status', 'processing')
-                        if pd.isna(cheque_status):
-                            cheque_status = 'processing'
+                        if pd.isna(cheque_status) or str(cheque_status).lower() not in valid_cheque_statuses_lower:
+                            cheque_status = 'processing' # Default to a valid status if current is invalid
                         edited_cheque_status = st.selectbox(
                             "Cheque Status",
                             ["received/given", "processing", "bounced", "processing done"],
@@ -1023,11 +1040,13 @@ with tab2:
                         edited_person = edit_data['person']
 
                     transaction_status = edit_data.get('transaction_status', 'completed')
+                    if pd.isna(transaction_status) or str(transaction_status).lower() not in valid_transaction_statuses_lower:
+                        transaction_status = 'completed' # Default to a valid status if current is invalid
                     edited_transaction_status = st.selectbox(
                         "Transaction Status", 
                         ["completed", "pending"], 
                         index=["completed", "pending"].index(
-                            str(transaction_status) if pd.notna(transaction_status) else 'completed'
+                            str(transaction_status)
                         ), 
                         key='edit_transaction_status'
                     )
@@ -1056,16 +1075,16 @@ with tab2:
                                 "date": edited_date.strftime("%Y-%m-%d"),
                                 "person": edited_person,
                                 "amount": edited_amount,
-                                "type": edit_data['type'],
-                                "status": edited_transaction_status,
+                                "type": edit_data['type'], # Keep original type
+                                "status": edited_transaction_status, # Update 'status' column
                                 "description": edited_description,
                                 "payment_method": edited_payment_method,
                                 "reference_number": edited_reference_number,
                                 "cheque_status": edited_cheque_status,
-                                "transaction_status": edited_transaction_status
+                                "transaction_status": edited_transaction_status # Update 'transaction_status' column
                             }
                             df.to_csv(CSV_FILE, index=False)
-                            generate_html_summary(df)
+                            generate_html_summary(df) # Pass the updated original df
                             git_push()
                             st.success("✅ Transaction updated successfully!")
                             st.session_state['editing_row_idx'] = None

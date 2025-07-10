@@ -332,9 +332,9 @@
             td:nth-of-type(3):before { content: "Amount"; }
             td:nth-of-type(4):before { content: "Type"; }
             td:nth-of-type(5):before { content: "Method"; }
-            td:nth-of-type(6):before { content: "Reference No."; }
-            td:nth-of-type(7):before { content: "Status"; }
-            td:nth-of-type(8):before { content: "Cheque Status"; }
+            td:nth-of-type(6):before { content: "Cheque Status"; }
+            td:nth-of-type(7):before { content: "Reference No."; }
+            td:nth-of-type(8):before { content: "Status"; }
             td:nth-of-type(9):before { content: "Description"; }
         }
     </style>
@@ -344,7 +344,7 @@
             const endDate = $('#end-date').val();
             const person = $('#name-filter').val().toLowerCase();
             const type = $('#type-filter').val();
-            const method = $('#method-filter').val();
+            const method = $('#method-filter').val().toLowerCase(); // Changed to lowercase for comparison
             const chequeStatus = $('#status-filter').val().toLowerCase();
             
             let visibleRows = 0;
@@ -367,7 +367,7 @@
                 const typePass = !type || rowType === type;
                 
                 // Method filter
-                const methodPass = !method || rowMethod === method.toLowerCase();
+                const methodPass = !method || rowMethod === method; // Compare lowercase values
                 
                 // Cheque status filter
                 const chequeStatusPass = !chequeStatus || 
@@ -434,7 +434,7 @@
             </div>
             <h1 class="report-title">Payment Summary Report</h1>
             <div class="report-date">
-                <i class="far fa-calendar-alt"></i> July 10, 2025 at 10:34 AM
+                <i class="far fa-calendar-alt"></i> July 10, 2025 at 10:46 AM
             </div>
         </header>
         
@@ -463,11 +463,11 @@
                     </div>
                     <div>
                         <div class="card-title">Total Paid</div>
-                        <div class="card-amount">Rs.1,451,497.00</div>
+                        <div class="card-amount">Rs.1,451,500.00</div>
                     </div>
                 </div>
                 <div class="card-details">
-                    <div><i class="fas fa-coins"></i> Cash: Rs.221,497.00</div>
+                    <div><i class="fas fa-coins"></i> Cash: Rs.221,500.00</div>
                     <div><i class="fas fa-money-check-alt"></i> Cheque: Rs.1,230,000.00</div>
                     <div><i class="fas fa-clock"></i> Pending: Rs.0.00</div>
                 </div>
@@ -480,7 +480,7 @@
                     </div>
                     <div>
                         <div class="card-title">Net Balance</div>
-                        <div class="card-amount">Rs.888,388.00</div>
+                        <div class="card-amount">Rs.888,385.00</div>
                     </div>
                 </div>
                 <div class="card-details">
@@ -577,7 +577,7 @@
                 </tr>
             </thead>
             <tbody>
-                <tr data-date="2025-07-10" 
+                <tr data-date="10-07-2025" 
                     data-person="Rizwan" 
                     data-type="paid_to_me" 
                     data-method="cash" 
@@ -587,12 +587,12 @@
                     <td>Rs. 125,000.00</td>
                     <td>Received</td>
                     <td>Cash</td>
-                    <td><span class="status "></span></td> <!-- Swapped positions -->
-                    <td>completed</td> <!-- Swapped positions -->
+                    <td><span class="status ">-</span></td>
+                    <td>-</td>
                     <td><span class="status pending">Pending</span></td>
                     <td>Fully paid</td>
                 </tr>
-                <tr data-date="2025-07-10" 
+                <tr data-date="10-07-2025" 
                     data-person="Rizwan" 
                     data-type="paid_to_me" 
                     data-method="cash" 
@@ -602,27 +602,27 @@
                     <td>Rs. 2,214,885.00</td>
                     <td>Received</td>
                     <td>Cash</td>
-                    <td><span class="status "></span></td> <!-- Swapped positions -->
-                    <td>completed</td> <!-- Swapped positions -->
+                    <td><span class="status ">-</span></td>
+                    <td>-</td>
                     <td><span class="status completed">Completed</span></td>
                     <td>testing testing 124</td>
                 </tr>
-                <tr data-date="2025-07-10" 
+                <tr data-date="10-07-2025" 
                     data-person="Shabbir" 
                     data-type="i_paid" 
                     data-method="cash" 
-                    data-cheque-status="74855896958.0">
+                    data-cheque-status="">
                     <td>10-07-2025</td>
                     <td>Shabbir</td>
-                    <td>Rs. 221,497.00</td>
+                    <td>Rs. 221,500.00</td>
                     <td>Paid</td>
                     <td>Cash</td>
-                    <td><span class="status 74855896958.0">74855896958.0</span></td> <!-- Swapped positions -->
-                    <td>completed</td> <!-- Swapped positions -->
                     <td><span class="status ">-</span></td>
+                    <td>-</td>
+                    <td><span class="status completed">Completed</span></td>
                     <td>To the vendor</td>
                 </tr>
-                <tr data-date="2025-07-10" 
+                <tr data-date="10-07-2025" 
                     data-person="Shabbir" 
                     data-type="i_paid" 
                     data-method="cheque" 
@@ -632,9 +632,9 @@
                     <td>Rs. 1,230,000.00</td>
                     <td>Paid</td>
                     <td>Cheque</td>
-                    <td><span class="status 259626956.0">259626956.0</span></td> <!-- Swapped positions -->
-                    <td>completed</td> <!-- Swapped positions -->
-                    <td><span class="status received/given">Received/given</span></td>
+                    <td><span class="status ">-</span></td>
+                    <td>-</td>
+                    <td><span class="status ">-</span></td>
                     <td>-</td>
                 </tr>
             </tbody>
