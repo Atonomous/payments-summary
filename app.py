@@ -671,6 +671,7 @@ def generate_html_summary(df):
                     <td>{row['Amount']}</td>
                     <td>{row['Type']}</td>
                     <td>{str(row['Method']).capitalize()}</td>
+                    <!-- Corrected column order: -->
                     <td>{row['Reference No.'] if row['Reference No.'] else '-'}</td>
                     <td><span class="status {status_class}">{str(row['Status']).capitalize() if pd.notna(row['Status']) else '-'}</span></td>
                     <td><span class="status {cheque_status_class}">{str(row['Cheque Status']).capitalize() if pd.notna(row['Cheque Status']) else '-'}</span></td>
