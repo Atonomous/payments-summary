@@ -130,7 +130,335 @@ def generate_html_summary(df):
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <style>
-        /* [All CSS styles remain exactly the same] */
+        body {{
+            font-family: 'Poppins', sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f7f6;
+            color: #333;
+            line-height: 1.6;
+        }}
+        .container {{
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 20px;
+            background-color: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+        }}
+        header {{
+            text-align: center;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #eee;
+            margin-bottom: 30px;
+        }}
+        .logo {{
+            font-size: 2.5em;
+            font-weight: 700;
+            color: #2c3e50;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 10px;
+        }}
+        .logo i {{
+            color: #28a745;
+            margin-right: 10px;
+            font-size: 0.9em;
+        }}
+        .report-title {{
+            font-size: 1.8em;
+            color: #34495e;
+            margin-bottom: 5px;
+        }}
+        .report-date {{
+            font-size: 0.9em;
+            color: #7f8c8d;
+        }}
+        .report-date i {{
+            margin-right: 5px;
+            color: #95a5a6;
+        }}
+
+        .summary-cards {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 25px;
+            margin-bottom: 40px;
+        }}
+        .card {{
+            background-color: #fdfdfd;
+            border-radius: 10px;
+            padding: 25px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.06);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            border-left: 5px solid;
+        }}
+        .card:hover {{
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+        }}
+        .card.received {{ border-left-color: #28a745; }}
+        .card.paid {{ border-left-color: #dc3545; }}
+        .card.balance {{ border-left-color: #007bff; }}
+
+        .card-header {{
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+        }}
+        .card-icon {{
+            font-size: 1.8em;
+            margin-right: 15px;
+            padding: 12px;
+            border-radius: 50%;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }}
+        .received .card-icon {{ background-color: #28a745; }}
+        .paid .card-icon {{ background-color: #dc3545; }}
+        .balance .card-icon {{ background-color: #007bff; }}
+
+        .card-title {{
+            font-size: 1.1em;
+            color: #555;
+            margin-bottom: 3px;
+        }}
+        .card-amount {{
+            font-size: 1.9em;
+            font-weight: 600;
+            color: #2c3e50;
+        }}
+        .card-details {{
+            font-size: 0.9em;
+            color: #666;
+            padding-left: 55px;
+        }}
+        .card-details div {{
+            margin-bottom: 5px;
+        }}
+        .card-details i {{
+            margin-right: 8px;
+            color: #999;
+        }}
+
+        .section-title {{
+            font-size: 1.6em;
+            color: #34495e;
+            margin-bottom: 25px;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 10px;
+            display: flex;
+            align-items: center;
+        }}
+        .section-title i {{
+            margin-right: 10px;
+            color: #007bff;
+        }}
+
+        .filters {{
+            background-color: #fdfdfd;
+            border-radius: 10px;
+            padding: 25px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.06);
+            margin-bottom: 40px;
+        }}
+        .filter-grid {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }}
+        .filter-group label {{
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: #555;
+        }}
+        .filter-group select,
+        .filter-group input[type="date"] {{
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-family: 'Poppins', sans-serif;
+            font-size: 0.95em;
+            color: #333;
+            box-sizing: border-box;
+            background-color: #fff;
+        }}
+        .filter-group select:focus,
+        .filter-group input[type="date"]:focus {{
+            border-color: #007bff;
+            box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.15);
+            outline: none;
+        }}
+        .filter-actions {{
+            text-align: right;
+            margin-top: 20px;
+        }}
+        .filter-btn {{
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: 500;
+            transition: background-color 0.3s ease, transform 0.2s ease;
+            margin-left: 10px;
+            display: inline-flex;
+            align-items: center;
+        }}
+        .filter-btn i {{
+            margin-right: 8px;
+        }}
+        .filter-btn:hover {{
+            background-color: #0056b3;
+            transform: translateY(-2px);
+        }}
+        .filter-btn.reset-btn {{
+            background-color: #6c757d;
+        }}
+        .filter-btn.reset-btn:hover {{
+            background-color: #5a6268;
+        }}
+
+        table {{
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 40px;
+            background-color: #fdfdfd;
+            border-radius: 10px;
+            overflow: hidden; /* Ensures rounded corners apply to content */
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.06);
+        }}
+        th, td {{
+            padding: 15px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }}
+        th {{
+            background-color: #e9ecef;
+            color: #495057;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.9em;
+        }}
+        tbody tr:nth-child(even) {{
+            background-color: #f8f9fa;
+        }}
+        tbody tr:hover {{
+            background-color: #f1f1f1;
+            transform: scale(1.005);
+            transition: background-color 0.2s ease, transform 0.2s ease;
+        }}
+        .status {{
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-weight: 500;
+            font-size: 0.85em;
+            color: #fff;
+            display: inline-block;
+        }}
+        .status.completed {{ background-color: #28a745; }}
+        .status.pending {{ background-color: #ffc107; color: #333; }}
+        .status.received-given {{ background-color: #6c757d; }}
+        .status.processing {{ background-color: #007bff; }}
+        .status.bounced {{ background-color: #dc3545; }}
+        .status.processing-done {{ background-color: #20c997; }}
+
+        .no-results {{
+            text-align: center;
+            padding: 50px 20px;
+            background-color: #fdfdfd;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.06);
+            margin-bottom: 40px;
+            color: #7f8c8d;
+        }}
+        .no-results p {{
+            font-size: 1.1em;
+            margin-top: 10px;
+        }}
+
+        .footer {{
+            text-align: center;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+            color: #7f8c8d;
+            font-size: 0.85em;
+            margin-top: 30px;
+        }}
+        .footer p {{
+            margin: 5px 0;
+        }}
+        .footer i {{
+            margin-right: 5px;
+            color: #95a5a6;
+        }}
+
+        /* Responsive adjustments */
+        @media (max-width: 768px) {{
+            .summary-cards {{
+                grid-template-columns: 1fr;
+            }}
+            .filter-grid {{
+                grid-template-columns: 1fr;
+            }}
+            .filter-actions {{
+                text-align: center;
+            }}
+            .filter-btn {{
+                width: 100%;
+                margin-left: 0;
+                margin-bottom: 10px;
+            }}
+            table, thead, tbody, th, td, tr {{
+                display: block;
+            }}
+            thead tr {{
+                position: absolute;
+                top: -9999px;
+                left: -9999px;
+            }}
+            tr {{
+                border: 1px solid #eee;
+                margin-bottom: 15px;
+                border-radius: 8px;
+                overflow: hidden;
+            }}
+            td {{
+                border: none;
+                position: relative;
+                padding-left: 50%;
+                text-align: right;
+            }}
+            td:before {{
+                content: attr(data-label);
+                position: absolute;
+                left: 10px;
+                width: 45%;
+                padding-right: 10px;
+                white-space: nowrap;
+                text-align: left;
+                font-weight: 600;
+                color: #555;
+            }}
+            /* Specific labels for mobile view */
+            td:nth-of-type(1):before {{ content: "Date"; }}
+            td:nth-of-type(2):before {{ content: "Person"; }}
+            td:nth-of-type(3):before {{ content: "Amount"; }}
+            td:nth-of-type(4):before {{ content: "Type"; }}
+            td:nth-of-type(5):before {{ content: "Method"; }}
+            td:nth-of-type(6):before {{ content: "Reference No."; }}
+            td:nth-of-type(7):before {{ content: "Status"; }}
+            td:nth-of-type(8):before {{ content: "Cheque Status"; }}
+            td:nth-of-type(9):before {{ content: "Description"; }}
+        }}
     </style>
     <script>
         function applyFilters() {{
@@ -366,9 +694,9 @@ def generate_html_summary(df):
                     <th>Amount</th>
                     <th>Type</th>
                     <th>Method</th>
-                    <th>Reference No.</th>
+                    <th>Cheque Status</th> <!-- Swapped positions -->
+                    <th>Reference No.</th> <!-- Swapped positions -->
                     <th>Status</th>
-                    <th>Cheque Status</th>
                     <th>Description</th>
                 </tr>
             </thead>
@@ -390,9 +718,9 @@ def generate_html_summary(df):
                     <td>{row['Amount']}</td>
                     <td>{row['Type']}</td>
                     <td>{str(row['Method']).capitalize()}</td>
-                    <td>{row['Reference No.'] if row['Reference No.'] else '-'}</td>
+                    <td><span class="status {cheque_status_class}">{str(row['Cheque Status']).capitalize() if pd.notna(row['Cheque Status']) else '-'}</span></td> <!-- Swapped positions -->
+                    <td>{row['Reference No.'] if row['Reference No.'] else '-'}</td> <!-- Swapped positions -->
                     <td><span class="status {status_class}">{str(row['Status']).capitalize() if pd.notna(row['Status']) else '-'}</span></td>
-                    <td><span class="status {cheque_status_class}">{str(row['Cheque Status']).capitalize() if pd.notna(row['Cheque Status']) else '-'}</span></td>
                     <td>{str(row['Description']) if pd.notna(row['Description']) else '-'}</td>
                 </tr>"""
 
@@ -585,9 +913,9 @@ with tab2:
             'amount_display': 'Amount',
             'type_display': 'Type',
             'payment_method': 'Method',
-            'reference_number': 'Reference No.',
+            'cheque_status': 'Cheque Status', # Swapped positions
+            'reference_number': 'Reference No.', # Swapped positions
             'transaction_status': 'Status',
-            'cheque_status': 'Cheque Status',
             'description': 'Description'
         }
         
@@ -648,13 +976,7 @@ with tab2:
                         index=["cash", "cheque"].index(edit_data.get('payment_method', 'cash')),
                         key='edit_payment_method'
                     )
-
-                    edited_reference_number = st.text_input(
-                        "Reference Number", 
-                        value=str(edit_data.get('reference_number', '')),  # Ensure string conversion
-                        key='edit_reference_number'
-                    )
-
+                    
                     if edited_payment_method == "cheque":
                         cheque_status = edit_data.get('cheque_status', 'processing')
                         if pd.isna(cheque_status):
@@ -669,7 +991,13 @@ with tab2:
                         )
                     else:
                         edited_cheque_status = ""
-                
+
+                    edited_reference_number = st.text_input(
+                        "Reference Number", 
+                        value=str(edit_data.get('reference_number', '')),  # Ensure string conversion
+                        key='edit_reference_number'
+                    )
+
                 with col2_edit:
                     try:
                         people_df = pd.read_csv(PEOPLE_FILE)
