@@ -344,34 +344,34 @@
             const endDate = $('#end-date').val();
             const person = $('#name-filter').val().toLowerCase();
             const type = $('#type-filter').val();
-            const method = $('#method-filter').val().toLowerCase(); 
+            const method = $('#method-filter').val().toLowerCase();
             const chequeStatus = $('#status-filter').val().toLowerCase();
-            
+
             let visibleRows = 0;
-            
+
             $('#transactions-table tbody tr').each(function() {
                 const rowDate = $(this).data('date'); // This will be YYYY-MM-DD
                 const rowPerson = $(this).data('person').toString().toLowerCase();
                 const rowType = $(this).data('type');
                 const rowMethod = $(this).data('method').toString().toLowerCase();
                 const rowChequeStatus = $(this).data('cheque-status').toString().toLowerCase();
-                
+
                 // Date filter: Compare YYYY-MM-DD strings directly
                 const datePass = (!startDate || rowDate >= startDate) && (!endDate || rowDate <= endDate);
-                
+
                 // Person filter
                 const personPass = !person || rowPerson.includes(person);
-                
+
                 // Type filter
                 const typePass = !type || rowType === type;
-                
+
                 // Method filter
-                const methodPass = !method || rowMethod === method; 
-                
+                const methodPass = !method || rowMethod === method;
+
                 // Cheque status filter
-                const chequeStatusPass = !chequeStatus || 
+                const chequeStatusPass = !chequeStatus ||
                                       (rowChequeStatus && rowChequeStatus.includes(chequeStatus));
-                
+
                 if (datePass && personPass && typePass && methodPass && chequeStatusPass) {
                     $(this).show();
                     visibleRows++;
@@ -379,7 +379,7 @@
                     $(this).hide();
                 }
             });
-            
+
             // Show/hide no results message
             if (visibleRows === 0) {
                 $('#no-results').show();
@@ -389,7 +389,7 @@
                 $('#transactions-table').show();
             }
         }
-        
+
         function resetFilters() {
             $('.filter-group select').val('');
             $('.date-filter').val('');
@@ -402,29 +402,30 @@
             oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
             $('#start-date').val(oneMonthAgo.toISOString().split('T')[0]);
             $('#end-date').val(today.toISOString().split('T')[0]);
+            applyFilters(); // Apply filters after resetting
         }
-        
+
         // Initialize date pickers with reasonable defaults
         $(document).ready(function() {
             const today = new Date();
             const oneMonthAgo = new Date();
             oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
-            
+
             $('#start-date').val(oneMonthAgo.toISOString().split('T')[0]);
             $('#end-date').val(today.toISOString().split('T')[0]);
-            
+
             // Apply filters when dropdowns change
             $('.filter-group select').change(function() {
                 applyFilters();
             });
-            
+
             // Apply filters when date inputs change
             $('.date-filter').change(function() {
                 applyFilters();
             });
-            
+
             // Initial filter application on load
-            applyFilters(); 
+            applyFilters();
         });
     </script>
 </head>
@@ -436,10 +437,10 @@
             </div>
             <h1 class="report-title">Payment Summary Report</h1>
             <div class="report-date">
-                <i class="far fa-calendar-alt"></i> July 28, 2025 at 10:28 PM
+                <i class="far fa-calendar-alt"></i> July 28, 2025 at 11:18 PM
             </div>
         </header>
-        
+
         <div class="summary-cards">
             <div class="card received">
                 <div class="card-header">
@@ -448,6 +449,23 @@
                     </div>
                     <div>
                         <div class="card-title">Total Received</div>
+                        <div class="card-amount">Rs.7,500.00</div>
+                    </div>
+                </div>
+                <div class="card-details">
+                    <div><i class="fas fa-coins"></i> Cash: Rs.7,500.00</div>
+                    <div><i class="fas fa-money-check-alt"></i> Cheque: Rs.0.00</div>
+                    <div><i class="fas fa-clock"></i> Pending: Rs.0.00</div>
+                </div>
+            </div>
+
+            <div class="card paid">
+                <div class="card-header">
+                    <div class="card-icon">
+                        <i class="fas fa-arrow-up"></i>
+                    </div>
+                    <div>
+                        <div class="card-title">Total Paid</div>
                         <div class="card-amount">Rs.0.00</div>
                     </div>
                 </div>
@@ -457,24 +475,7 @@
                     <div><i class="fas fa-clock"></i> Pending: Rs.0.00</div>
                 </div>
             </div>
-            
-            <div class="card paid">
-                <div class="card-header">
-                    <div class="card-icon">
-                        <i class="fas fa-arrow-up"></i>
-                    </div>
-                    <div>
-                        <div class="card-title">Total Paid</div>
-                        <div class="card-amount">Rs.25,000.00</div>
-                    </div>
-                </div>
-                <div class="card-details">
-                    <div><i class="fas fa-coins"></i> Cash: Rs.25,000.00</div>
-                    <div><i class="fas fa-money-check-alt"></i> Cheque: Rs.0.00</div>
-                    <div><i class="fas fa-clock"></i> Pending: Rs.0.00</div>
-                </div>
-            </div>
-            
+
             <div class="card balance">
                 <div class="card-header">
                     <div class="card-icon">
@@ -482,23 +483,23 @@
                     </div>
                     <div>
                         <div class="card-title">Net Balance</div>
-                        <div class="card-amount">Rs.-25,000.00</div>
+                        <div class="card-amount">Rs.7,500.00</div>
                     </div>
                 </div>
                 <div class="card-details">
                     <div><i class="fas fa-info-circle"></i> Received - Paid</div>
                     <div style="margin-top: 10px;">
-                        <span style="color: #dc3545;"><i class="fas fa-exclamation-circle"></i> Negative Balance</span>
+                        <span style="color: #28a745;"><i class="fas fa-check-circle"></i> Positive Balance</span>
                     </div>
                 </div>
             </div>
         </div>
-        
+
         <div class="filters">
             <h2 class="section-title">
                 <i class="fas fa-filter"></i> Filters
             </h2>
-            
+
             <div class="filter-grid">
                 <div class="filter-group">
                     <label for="start-date">Date Range</label>
@@ -506,15 +507,15 @@
                     <span style="display: inline-block; margin: 0 5px; font-size: 12px;">to</span>
                     <input type="date" id="end-date" class="date-filter">
                 </div>
-                
+
                 <div class="filter-group">
                     <label for="name-filter">Person</label>
                     <select id="name-filter">
                         <option value="">All</option>
-                        <option value="Zohaib">Zohaib</option>
+                        <option value="Rizwan">Rizwan</option><option value="Shabbir">Shabbir</option><option value="Zohaib">Zohaib</option>
                     </select>
                 </div>
-                
+
                 <div class="filter-group">
                     <label for="type-filter">Transaction Type</label>
                     <select id="type-filter">
@@ -523,7 +524,7 @@
                         <option value="i_paid">Paid</option>
                     </select>
                 </div>
-                
+
                 <div class="filter-group">
                     <label for="method-filter">Payment Method</label>
                     <select id="method-filter">
@@ -532,7 +533,7 @@
                         <option value="cheque">Cheque</option>
                     </select>
                 </div>
-                
+
                 <div class="filter-group">
                     <label for="status-filter">Cheque Status</label>
                     <select id="status-filter">
@@ -544,7 +545,7 @@
                     </select>
                 </div>
             </div>
-            
+
             <div class="filter-actions">
                 <button class="filter-btn" onclick="applyFilters()">
                     <i class="fas fa-filter"></i> Apply Filters
@@ -554,16 +555,16 @@
                 </button>
             </div>
         </div>
-        
+
         <h2 class="section-title">
             <i class="fas fa-list"></i> All Transactions
         </h2>
-        
+
         <div class="no-results" id="no-results">
             <i class="fas fa-search" style="font-size: 24px; margin-bottom: 10px;"></i>
             <p>No transactions match your filters</p>
         </div>
-        
+
         <table id="transactions-table">
             <thead>
                 <tr>
@@ -572,31 +573,46 @@
                     <th>Amount</th>
                     <th>Type</th>
                     <th>Method</th>
-                    <th>Cheque Status</th> <!-- Swapped positions -->
-                    <th>Reference No.</th> <!-- Swapped positions -->
+                    <th>Cheque Status</th>
+                    <th>Reference No.</th>
                     <th>Status</th>
                     <th>Description</th>
                 </tr>
             </thead>
             <tbody>
-                <tr data-date="2025-07-28" 
-                    data-person="Zohaib" 
-                    data-type="i_paid" 
-                    data-method="cash" 
-                    data-cheque-status="785000">
+                <tr data-date="2025-07-28"
+                    data-person="Rizwan"
+                    data-type="paid_to_me"
+                    data-method="cash"
+                    data-cheque-status="">
                     <td>2025-07-28</td>
-                    <td>Zohaib</td>
-                    <td>Rs. 25,000.00</td>
-                    <td>Paid</td>
+                    <td>Rizwan</td>
+                    <td>nan</td>
+                    <td>Received</td>
                     <td>Cash</td>
                     <td><span class="status ">-</span></td>
                     <td>-</td>
                     <td><span class="status ">-</span></td>
-                    <td>Paid first time</td>
+                    <td>NotReally1</td>
+                </tr>
+                <tr data-date=""
+                    data-person="Rizwan"
+                    data-type="paid_to_me"
+                    data-method="cash"
+                    data-cheque-status="">
+                    <td></td>
+                    <td>Rizwan</td>
+                    <td>nan</td>
+                    <td>Received</td>
+                    <td>Cash</td>
+                    <td><span class="status ">-</span></td>
+                    <td>-</td>
+                    <td><span class="status ">-</span></td>
+                    <td>SAASDASD</td>
                 </tr>
             </tbody>
         </table>
-        
+
         <div class="footer">
             <p><i class="fas fa-file-alt"></i> This report was automatically generated by Payment Tracker System</p>
             <p><i class="far fa-copyright"></i> {datetime.now().year} All Rights Reserved</p>

@@ -4,7 +4,38 @@ from datetime import datetime
 import os
 from git import Repo
 
-# Configuration
+# Session State Initialization - MUST BE AT THE VERY TOP
+def init_state():
+    """
+    Initializes all necessary session state variables with default values.
+    This function is called at the very beginning of the script to ensure
+    all keys are present before widgets attempt to access them.
+    """
+    keys = [
+        'selected_transaction_type', 'payment_method', 'editing_row_idx', 'selected_person', 'reset_add_form',
+        'add_amount', 'add_date', 'add_reference_number', 'add_cheque_status', 'add_status', 'add_description'
+    ]
+    defaults = {
+        'selected_transaction_type': 'Paid to Me',
+        'payment_method': 'cash',
+        'editing_row_idx': None,
+        'selected_person': "Select...",
+        'reset_add_form': False,
+        'add_amount': 0.0,
+        'add_date': datetime.now().date(),
+        'add_reference_number': '',
+        'add_cheque_status': 'received/given',
+        'add_status': 'completed',
+        'add_description': ''
+    }
+    for k in keys:
+        if k not in st.session_state:
+            st.session_state[k] = defaults[k]
+
+init_state() # Call init_state here, before any st. commands that might trigger a rerun or widget creation.
+
+
+# Configuration (kept here as they are global constants)
 REPO_PATH = os.getcwd()
 CSV_FILE = os.path.join(REPO_PATH, "payments.csv")
 PEOPLE_FILE = os.path.join(REPO_PATH, "people.csv")
@@ -82,9 +113,11 @@ def git_push():
         origin = repo.remote(name='origin')
         origin.push()
         st.success("GitHub updated successfully!")
+        return True
     except Exception as e:
         st.error(f"Error updating GitHub: {e}")
         st.warning("Please ensure you have configured Git and have push access to the repository.")
+        return False
 
 def prepare_dataframe_for_display(df):
     """
@@ -116,10 +149,13 @@ def prepare_dataframe_for_display(df):
     # Robust Cheque Status Display:
     # If payment method is 'cash', force cheque_status_display to '-'.
     # Otherwise, validate against valid_cheque_statuses_lower.
-    df_display['cheque_status_display'] = df_display.apply(
-        lambda row: '-' if row['payment_method'].lower() == 'cash' else (
-            str(row['cheque_status']).capitalize() if str(row['cheque_status']).lower() in valid_cheque_statuses_lower else '-'
+    df_display['cheque_status_cleaned'] = df_display.apply(
+        lambda row: None if row['payment_method'].lower() == 'cash' else (
+            str(row['cheque_status']) if pd.notna(row['cheque_status']) else None
         ), axis=1
+    )
+    df_display['cheque_status_display'] = df_display['cheque_status_cleaned'].apply(
+        lambda x: next((s.capitalize() for s in valid_cheque_statuses_lower if x is not None and str(x).lower() == s), '-')
     )
 
     # Robust Transaction Status Display:
@@ -788,7 +824,7 @@ def generate_html_summary(df):
                     data-person="{row['person']}"
                     data-type="{row['type']}"
                     data-method="{str(row['payment_method']).lower()}"
-                    data-cheque-status="{str(row['cheque_status_cleaned']).lower() if pd.notna(row['cheque_status_cleaned']) else ''}">
+                    data-cheque-status="{str(row['cheque_status_display']).lower() if row['cheque_status_display'] != '-' else ''}">
                     <td>{row['formatted_date']}</td>
                     <td>{row['person']}</td>
                     <td>{row['amount_display']}</td>
@@ -817,30 +853,15 @@ def generate_html_summary(df):
         with open(SUMMARY_FILE, "w", encoding="utf-8") as f:
             f.write(html)
         st.toast("HTML summary generated successfully!")
+        return True
     except Exception as e:
         st.error(f"Error generating HTML summary: {e}")
+        return False
 
 # Streamlit UI
 st.set_page_config(layout="wide")
 st.title("💰 Payment Tracker")
 st.sidebar.markdown(f"[🌐 View Public Summary]({SUMMARY_URL})", unsafe_allow_html=True)
-
-# Session State Initialization
-def init_state():
-    keys = [
-        'selected_transaction_type', 'payment_method', 'editing_row_idx', 'selected_person'
-    ]
-    defaults = {
-        'selected_transaction_type': 'Paid to Me',
-        'payment_method': 'cash',
-        'editing_row_idx': None,
-        'selected_person': "Select..."
-    }
-    for k in keys:
-        if k not in st.session_state:
-            st.session_state[k] = defaults[k]
-
-init_state()
 
 def reset_form_session_state_for_add_transaction():
     """Resets session state variables for the 'Add Transaction' form."""
@@ -848,14 +869,18 @@ def reset_form_session_state_for_add_transaction():
     st.session_state['payment_method'] = 'cash'
     st.session_state['selected_person'] = "Select..."
     st.session_state['editing_row_idx'] = None # Ensure edit mode is off
-    # Clear form inputs by setting their keys to default values if they exist in session_state
-    if 'add_amount' in st.session_state: st.session_state['add_amount'] = 0.0
-    if 'add_date' in st.session_state: st.session_state['add_date'] = datetime.now().date()
-    if 'add_reference_number' in st.session_state: st.session_state['add_reference_number'] = ''
-    if 'add_cheque_status' in st.session_state: st.session_state['add_cheque_status'] = 'received/given'
-    if 'add_status' in st.session_state: st.session_state['add_status'] = 'completed'
-    if 'add_description' in st.session_state: st.session_state['add_description'] = ''
+    # Clear form inputs by setting their keys to default values
+    st.session_state['add_amount'] = 0.0
+    st.session_state['add_date'] = datetime.now().date()
+    st.session_state['add_reference_number'] = ''
+    st.session_state['add_cheque_status'] = 'received/given'
+    st.session_state['add_status'] = 'completed'
+    st.session_state['add_description'] = ''
 
+# Handle form reset at the beginning of the rerun, if flagged
+if st.session_state.get('reset_add_form', False):
+    reset_form_session_state_for_add_transaction()
+    st.session_state['reset_add_form'] = False # Reset the flag immediately after handling
 
 tab1, tab2, tab3 = st.tabs(["Add Transaction", "View Transactions", "Manage People"])
 
@@ -891,25 +916,33 @@ with tab1:
     with st.form("transaction_form", clear_on_submit=False): # Set clear_on_submit to False to manage state manually
         col1, col2 = st.columns(2)
         with col1:
+            # CORRECTED: Removed explicit default value from 'value' parameter
             amount = st.number_input("Amount (Rs.)", min_value=0.0, format="%.2f",
-                                     value=st.session_state.get('add_amount', 0.0), key='add_amount')
-            date = st.date_input("Date", value=st.session_state.get('add_date', datetime.now().date()), key='add_date')
+                                     value=st.session_state['add_amount'], key='add_amount')
+            # CORRECTED: Removed explicit default value from 'value' parameter
+            date = st.date_input("Date", value=st.session_state['add_date'], key='add_date')
 
+            # CORRECTED: Removed explicit default value from 'value' parameter
             reference_number = st.text_input("Reference Number (Receipt/Cheque No.)",
-                                             value=st.session_state.get('add_reference_number', ''), key='add_reference_number')
+                                             value=st.session_state['add_reference_number'], key='add_reference_number')
 
             cheque_status_val = ""
             if st.session_state['payment_method'] == "cheque":
+                default_cheque_status_idx = 0
+                # Ensure the value in session state is valid before trying to find its index
+                if st.session_state['add_cheque_status'] in valid_cheque_statuses_lower:
+                    default_cheque_status_idx = valid_cheque_statuses_lower.index(st.session_state['add_cheque_status'])
+                
+                # CORRECTED: Removed explicit default value from 'index' parameter
                 cheque_status_val = st.selectbox(
                     "Cheque Status",
-                    ["received/given", "processing", "bounced", "processing done"],
-                    index=["received/given", "processing", "bounced", "processing done"].index(
-                        st.session_state.get('add_cheque_status', 'received/given')
-                    ),
+                    valid_cheque_statuses_lower,
+                    index=default_cheque_status_idx,
                     key='add_cheque_status'
                 )
 
         with col2:
+            # This selectbox already correctly uses st.session_state for index
             st.session_state['selected_person'] = st.selectbox(
                 "Select Person", person_options, index=current_person_index, key='selected_person_dropdown'
             )
@@ -918,11 +951,17 @@ with tab1:
             else:
                 selected_person_final = st.session_state['selected_person']
 
-
-            status = st.selectbox("Transaction Status", ["completed", "pending"],
-                                  index=["completed", "pending"].index(st.session_state.get('add_status', 'completed')),
+            default_status_idx = 0
+            # Ensure the value in session state is valid before trying to find its index
+            if st.session_state['add_status'] in valid_transaction_statuses_lower:
+                default_status_idx = valid_transaction_statuses_lower.index(st.session_state['add_status'])
+            
+            # CORRECTED: Removed explicit default value from 'index' parameter
+            status = st.selectbox("Transaction Status", valid_transaction_statuses_lower,
+                                  index=default_status_idx,
                                   key='add_status')
-            description = st.text_input("Description", value=st.session_state.get('add_description', ''), key='add_description')
+            # CORRECTED: Removed explicit default value from 'value' parameter
+            description = st.text_input("Description", value=st.session_state['add_description'], key='add_description')
 
         submitted = st.form_submit_button("Add Transaction")
         if submitted:
@@ -947,12 +986,23 @@ with tab1:
                         "transaction_status": status # Use the selected status for transaction_status
                     }
                     pd.DataFrame([new_row]).to_csv(CSV_FILE, mode='a', header=False, index=False)
+                    
                     # Read the updated CSV and prepare for HTML summary
                     updated_df = pd.read_csv(CSV_FILE)
-                    generate_html_summary(updated_df)
-                    git_push()
-                    st.success("Transaction added successfully.")
-                    reset_form_session_state_for_add_transaction() # Reset form after successful submission
+                    
+                    html_generated = generate_html_summary(updated_df)
+                    git_pushed = False
+                    if html_generated: # Only push to git if HTML generation was successful
+                        git_pushed = git_push()
+                    
+                    if html_generated and git_pushed:
+                        st.success("Transaction added successfully and GitHub updated.")
+                    elif html_generated:
+                        st.success("Transaction added successfully. HTML summary generated.")
+                    else:
+                        st.error("Transaction added, but HTML summary or GitHub update failed.")
+
+                    st.session_state['reset_add_form'] = True # Set flag for next rerun
                     st.rerun() # Rerun to clear form inputs visually
                 except Exception as e:
                     st.error(f"Error saving transaction: {e}")
@@ -967,7 +1017,6 @@ with tab2:
         # Check if DataFrame is empty
         if df.empty:
             st.info("No transactions recorded yet.")
-            # st.stop() # Removed st.stop() to allow other parts of the app to render
             
         # Prepare DataFrame for display, which includes validation and formatting
         # Use a temporary DataFrame for filtering to avoid modifying the original 'df'
@@ -1175,7 +1224,7 @@ with tab2:
 
     except Exception as e:
             st.error(f"Error loading transaction history: {str(e)}")
-            # st.stop() # Removed st.stop() to allow other parts of the app to render
+            
 
 # ------------------ Tab 3: Manage People ------------------
 with tab3:
