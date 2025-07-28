@@ -1,9 +1,9 @@
 date,person,amount,type,status,description,payment_method,cheque_status,transaction_status,reference_number,amount_display,type_display,original_index,formatted_date
-10/07/2025,Rizwan,125000,paid_to_me,pending,Fully paid,cash,,pending,completed,8558,Received,0,10/07/2025
-10/07/2025,Rizwan,2214885,paid_to_me,completed,testing testing 124,cash,,completed,completed,,,,
-10/07/2025,Shabbir,221500,i_paid,completed,To the vendor,cash,,completed,1452525,,,,
-10/07/2025,Shabbir,1230000,i_paid,completed,nan,cheque,processing,completed,completed,,,,
-28/07/2025,Zohaib,500,i_paid,completed,F&B,cash,1,,completed,,,,
-2025-07-28,Shabbir,9999.0,i_paid,completed,New Laptop Testing,cheque,18885854582,processing done,completed
-2025-07-28,Shabbir,5858848.0,i_paid,completed,Test2,cash,548415481548,,completed
-2025-07-28,Rizwan,789878.0,paid_to_me,completed,First Try,cash,525252,,completed
+,,,,,,,,,,,,,
+,,,,,,,,,,,,,
+,,,,,,,,,,,,,
+,,,,,,,,,,,,,
+,,,,,,,,,,,,,
+,,,,,,,,,,,,,
+,,,,,,,,,,,,,
+,,,,,,,,,,,,,
