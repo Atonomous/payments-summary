@@ -22,3 +22,4 @@ date,person,amount,type,status,description,payment_method,cheque_status,transact
 >>>>>>> 95cfd5cd0027788c9a7d1ba142a544149460701e,,,,,,,,,,,,,,
 2025-07-28,Rizwan,2500.0,paid_to_me,completed,Ussi Ke the,cash,,,completed,648684646
 2025-07-28,Zohaib,52000.0,i_paid,completed,Paid first time,cheque,45454225,received/given,completed
+2025-07-28,Zohaib,785000.0,i_paid,completed,Paid first time,cheque,123123213,received/given,completed
