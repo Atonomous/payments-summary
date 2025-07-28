@@ -102,9 +102,12 @@ def clean_payments_data(df):
         else: # For cash payments, ensure cheque_status is empty
             df.loc[index, 'cheque_status'] = ''
 
-    # --- NEW FIX: Specific handling for 'reference_number' to remove .0 and scientific notation ---
+    # --- FIX: Specific handling for 'reference_number' to remove .0 and scientific notation ---
+    # This loop ensures that the 'reference_number' column is consistently a clean string.
     for index, value in df['reference_number'].items():
-        if value: # Only process if not empty
+        if pd.isna(value) or str(value).strip().lower() == 'nan' or str(value).strip().lower() == 'none':
+            df.loc[index, 'reference_number'] = '' # Ensure it's an empty string
+        else:
             try:
                 # Attempt to convert to float
                 float_val = float(value)
@@ -115,12 +118,11 @@ def clean_payments_data(df):
                     # Keep as float string if it has decimal component
                     df.loc[index, 'reference_number'] = str(float_val)
             except ValueError:
-                # Not a number, keep as is (it's already stripped and 'nan' replaced with empty string)
-                pass
-    # --- END NEW FIX ---
+                # Not a number, keep as is (it's already stripped)
+                df.loc[index, 'reference_number'] = str(value).strip()
+    # --- END FIX ---
 
     # Remove rows where 'date', 'person', 'amount' are all empty/zero after cleaning
-    # This addresses the blank rows with 0.0 amount that appear in your CSV
     df = df[~((df['date'] == '') & (df['person'] == '') & (df['amount'] == 0.0))]
 
     return df
@@ -142,10 +144,9 @@ def init_files():
             ]).to_csv(CSV_FILE, index=False)
             st.toast(f"Created new {CSV_FILE}")
         else:
-            # --- CRITICAL FIX: Force reference_number to be read as string ---
-            # This is key to preventing Pandas from inferring it as a number
+            # CRITICAL FIX: Force reference_number to be read as string
+            # This is key to preventing Pandas from inferring it as a number or float
             df = pd.read_csv(CSV_FILE, dtype={'reference_number': str})
-            # --- END CRITICAL FIX ---
 
             # Handle migration from old format to new format if needed
             if 'receipt_number' in df.columns or 'cheque_number' in df.columns:
@@ -167,7 +168,7 @@ def init_files():
                 if col not in df.columns:
                     df[col] = ''
             
-            # --- CRITICAL: Clean data on load and save back ---
+            # CRITICAL: Clean data on load and save back
             df = clean_payments_data(df)
             df.to_csv(CSV_FILE, index=False) # Save the cleaned data back to CSV
             st.toast("Payments data cleaned and saved.")
@@ -192,39 +193,29 @@ init_files()
 def git_push():
     """
     Performs a Git add, commit, and push operation.
-    Includes more verbose logging for debugging.
     """
     try:
-        st.write("Attempting Git push...") # Debugging print
         repo = Repo(REPO_PATH)
         
         # Check for uncommitted changes before adding
         if repo.is_dirty(untracked_files=True):
-            st.write("Uncommitted changes detected. Adding files...")
             repo.git.add(update=True) # Add all modified files
             repo.git.add(all=True) # Also add untracked files (like new HTML if created)
-            st.write("Files added to staging.")
-        else:
-            st.write("No changes detected to stage.")
-
+        
         # Only commit if there are changes in the index
         if repo.index.diff("HEAD"):
-            st.write("Changes in index. Committing...")
             repo.index.commit("Automated update: payment records")
-            st.write("Commit successful.")
         else:
-            st.write("No changes to commit.")
             return True # No changes, so nothing to push, consider it successful
 
         origin = repo.remote(name='origin')
-        st.write(f"Pushing to remote: {origin.url}") # Debugging print
         origin.push()
         st.success("GitHub updated successfully!")
         return True
     except Exception as e:
         st.error(f"Error updating GitHub: {e}")
         st.warning("Please ensure you have configured Git and have push access to the repository.")
-        st.warning("Try running 'git push' manually in your terminal to see specific errors.")
+        st.warning("If the issue persists, try running 'git push' manually in your terminal for detailed errors.")
         return False
 
 def prepare_dataframe_for_display(df):
@@ -238,7 +229,6 @@ def prepare_dataframe_for_display(df):
     df_display = df.copy()
 
     # Ensure columns are strings and handle common NaN/None representations
-    # Fill NaN/None with empty strings for consistent string operations
     for col in ['reference_number', 'cheque_status', 'transaction_status', 'payment_method', 'description', 'person', 'type', 'status']:
         if col in df_display.columns:
             df_display[col] = df_display[col].astype(str).replace('nan', '').replace('None', '').str.strip()
@@ -247,19 +237,13 @@ def prepare_dataframe_for_display(df):
 
     # Convert amount to float and handle missing values for calculations
     df_display['amount'] = pd.to_numeric(df_display['amount'], errors='coerce').fillna(0.0)
-    # --- FIX: Explicitly create amount_display with formatting ---
     df_display['amount_display'] = df_display['amount'].apply(lambda x: f"Rs. {x:,.2f}")
-    # --- END FIX ---
 
     # Robust Date Formatting:
-    # Try to parse dates, coercing errors to NaT. Removed dayfirst=True.
     df_display['date_parsed'] = pd.to_datetime(df_display['date'], errors='coerce')
-    # Format for display, filling NaT (Not a Time) with an empty string.
     df_display['formatted_date'] = df_display['date_parsed'].dt.strftime('%Y-%m-%d').fillna('')
 
     # Robust Cheque Status Display:
-    # If payment method is 'cash', force cheque_status_display to '-'.
-    # Otherwise, validate against valid_cheque_statuses_lower.
     df_display['cheque_status_cleaned'] = df_display.apply(
         lambda row: None if row['payment_method'].lower() == 'cash' else (
             str(row['cheque_status']) if pd.notna(row['cheque_status']) else None
@@ -270,30 +254,20 @@ def prepare_dataframe_for_display(df):
     )
 
     # Robust Transaction Status Display:
-    # Validate against valid_transaction_statuses_lower.
     df_display['transaction_status_display'] = df_display.apply(
         lambda row: str(row['transaction_status']).capitalize() if str(row['transaction_status']).lower() in valid_transaction_statuses_lower else '-',
         axis=1
     )
 
     # Robust Reference Number Display:
-    # Show if not empty and not a transaction status.
-    # Also handle cases where a cheque status might have been mistakenly put here.
+    # This uses the already cleaned 'reference_number' column from clean_payments_data
     df_display['reference_number_display'] = df_display.apply(
-        lambda row: str(row['reference_number']) if str(row['reference_number']).strip() != '' and \
-                     str(row['reference_number']).lower() not in valid_transaction_statuses_lower and \
-                     str(row['reference_number']).lower() not in valid_cheque_statuses_lower else '-',
+        lambda row: str(row['reference_number']) if str(row['reference_number']).strip() != '' else '-',
         axis=1
     )
 
     # Format 'type' for display ('paid_to_me' -> 'Received', 'i_paid' -> 'Paid')
     df_display['type_display'] = df_display['type'].map({'paid_to_me': 'Received', 'i_paid': 'Paid'}).fillna('')
-
-    # --- DEBUG PRINT (to console, not sidebar) ---
-    print("\n--- DEBUG: prepare_dataframe_for_display Output (Head) ---")
-    print(df_display[['formatted_date', 'person', 'amount_display', 'type_display', 'payment_method', 'cheque_status_display', 'reference_number_display', 'transaction_status_display']].head().to_markdown(index=False, numalign="left", stralign="left"))
-    print("----------------------------------------------------------\n")
-    # --- END DEBUG PRINT ---
 
     return df_display
 
@@ -307,7 +281,6 @@ def generate_html_summary(df):
         transactions_display = prepare_dataframe_for_display(df)
 
         # Calculate payment totals from the original (unmodified) DataFrame for accuracy
-        # Ensure 'amount' is numeric for calculations
         df_for_totals = df.copy()
         df_for_totals['amount'] = pd.to_numeric(df_for_totals['amount'], errors='coerce').fillna(0.0)
         df_for_totals['type'] = df_for_totals['type'].astype(str).str.lower()
@@ -907,27 +880,34 @@ def generate_html_summary(df):
             </thead>
             <tbody>"""
 
-        # Add transaction rows with correct column data using the prepared DataFrame
-        for idx, row in transactions_display.iterrows():
-            # Use the _display columns for values and classes
-            cheque_status_class = str(row['cheque_status_display']).lower().replace(' ', '-').replace('/', '-') if row['cheque_status_display'] != '-' else ''
-            status_class = str(row['transaction_status_display']).lower().replace(' ', '-') if row['transaction_status_display'] != '-' else ''
+        # Add transaction rows with correct column data using the original, cleaned DataFrame for data attributes
+        for idx, row in df.iterrows(): # Use 'df' directly for data attributes
+            # Ensure values are strings for data attributes
+            row_date = str(row['date'])
+            row_person = str(row['person'])
+            row_type = str(row['type'])
+            row_method = str(row['payment_method']).lower()
+            row_cheque_status = str(row['cheque_status']).lower() if str(row['cheque_status']).strip() != '' else ''
+
+            # Use the _display columns for visible content
+            cheque_status_class = str(transactions_display.loc[idx, 'cheque_status_display']).lower().replace(' ', '-').replace('/', '-') if transactions_display.loc[idx, 'cheque_status_display'] != '-' else ''
+            status_class = str(transactions_display.loc[idx, 'transaction_status_display']).lower().replace(' ', '-') if transactions_display.loc[idx, 'transaction_status_display'] != '-' else ''
 
             html += f"""
-                <tr data-date="{row['formatted_date']}"
-                    data-person="{row['person']}"
-                    data-type="{row['type']}"
-                    data-method="{str(row['payment_method']).lower()}"
-                    data-cheque-status="{str(row['cheque_status_display']).lower() if row['cheque_status_display'] != '-' else ''}">
-                    <td>{row['formatted_date']}</td>
-                    <td>{row['person']}</td>
-                    <td>{row['amount_display']}</td>
-                    <td>{row['type_display']}</td>
-                    <td>{str(row['payment_method']).capitalize()}</td>
-                    <td><span class="status {cheque_status_class}">{row['cheque_status_display']}</span></td>
-                    <td>{row['reference_number_display']}</td>
-                    <td><span class="status {status_class}">{row['transaction_status_display']}</span></td>
-                    <td>{row['description'] if row['description'] else '-'}</td>
+                <tr data-date="{row_date}"
+                    data-person="{row_person}"
+                    data-type="{row_type}"
+                    data-method="{row_method}"
+                    data-cheque-status="{row_cheque_status}">
+                    <td>{transactions_display.loc[idx, 'formatted_date']}</td>
+                    <td>{transactions_display.loc[idx, 'person']}</td>
+                    <td>{transactions_display.loc[idx, 'amount_display']}</td>
+                    <td>{transactions_display.loc[idx, 'type_display']}</td>
+                    <td>{str(transactions_display.loc[idx, 'payment_method']).capitalize()}</td>
+                    <td><span class="status {cheque_status_class}">{transactions_display.loc[idx, 'cheque_status_display']}</span></td>
+                    <td>{transactions_display.loc[idx, 'reference_number_display']}</td>
+                    <td><span class="status {status_class}">{transactions_display.loc[idx, 'transaction_status_display']}</span></td>
+                    <td>{transactions_display.loc[idx, 'description'] if transactions_display.loc[idx, 'description'] else '-'}</td>
                 </tr>"""
 
         html += """
@@ -1069,13 +1049,11 @@ with tab1:
                 validation_passed = False
             if not str(reference_number).strip(): # Use str() to handle potential None/NaN from widget
                 if st.session_state['payment_method'] == "cheque":
-                    st.warning(f"🚨 Reference Number is **REQUIRED** for cheque transactions. Current value: '{str(reference_number).strip()}'")
+                    st.warning(f"🚨 Reference Number is **REQUIRED** for cheque transactions.")
                 else:
-                    st.warning(f"🚨 Reference Number is required. Current value: '{str(reference_number).strip()}'")
+                    st.warning(f"🚨 Reference Number is required.")
                 validation_passed = False
-            else:
-                st.info(f"Reference Number captured for saving: '{str(reference_number).strip()}'")
-
+            
             if validation_passed:
                 try:
                     new_row = {
@@ -1090,15 +1068,12 @@ with tab1:
                         "cheque_status": cheque_status_val if st.session_state['payment_method'] == "cheque" else None,
                         "transaction_status": status # Use the selected status for transaction_status
                     }
-                    print("\n--- DEBUG: New Row before CSV write ---")
-                    print(new_row)
-                    print("---------------------------------------\n")
                     pd.DataFrame([new_row]).to_csv(CSV_FILE, mode='a', header=False, index=False)
                     
                     # Read the updated CSV and CLEAN IT before generating HTML
                     updated_df = pd.read_csv(CSV_FILE, dtype={'reference_number': str}) # Re-read with dtype fix
-                    updated_df = clean_payments_data(updated_df) # <--- ADDED THIS LINE
-                    updated_df.to_csv(CSV_FILE, index=False) # <--- ADDED THIS LINE TO SAVE CLEANED DF
+                    updated_df = clean_payments_data(updated_df)
+                    updated_df.to_csv(CSV_FILE, index=False) # Save the cleaned data back to CSV
 
                     html_generated = generate_html_summary(updated_df)
                     git_pushed = False
@@ -1122,15 +1097,8 @@ with tab2:
     st.subheader("Transaction History")
 
     try:
-        # --- CRITICAL FIX: Force reference_number to be read as string here too ---
+        # CRITICAL FIX: Force reference_number to be read as string here too
         df = pd.read_csv(CSV_FILE, dtype={'reference_number': str})
-        # --- END CRITICAL FIX ---
-
-        # --- DEBUG PRINT (to console, not sidebar) ---
-        print("\n--- DEBUG: Raw DataFrame from CSV (Head) ---")
-        print(df.head().to_markdown(index=False, numalign="left", stralign="left"))
-        print("-------------------------------------------\n")
-        # --- END DEBUG PRINT ---
 
         # Check if DataFrame is empty
         if df.empty:
@@ -1254,7 +1222,7 @@ with tab2:
 
                     edited_reference_number = st.text_input(
                         "Reference Number",
-                        value=str(edit_data.get('reference_number', '')), # Now this should correctly show the string
+                        value=str(edit_data.get('reference_number', '')), # This should now correctly show the string
                         key='edit_reference_number'
                     )
 
@@ -1313,13 +1281,11 @@ with tab2:
                         validation_passed = False
                     if not str(edited_reference_number).strip(): # Use str() to handle potential None/NaN from widget
                         if edited_payment_method == "cheque":
-                            st.warning(f"🚨 Reference Number is **REQUIRED** for cheque transactions. Current value: '{str(edited_reference_number).strip()}'")
+                            st.warning(f"🚨 Reference Number is **REQUIRED** for cheque transactions.")
                         else:
-                            st.warning(f"🚨 Reference Number is required. Current value: '{str(edited_reference_number).strip()}'")
+                            st.warning(f"🚨 Reference Number is required.")
                         validation_passed = False
-                    else:
-                        st.info(f"Reference Number captured for saving: '{str(edited_reference_number).strip()}'")
-
+                    
                     if validation_passed:
                         try:
                             df.loc[st.session_state['editing_row_idx']] = {
@@ -1334,14 +1300,11 @@ with tab2:
                                 "cheque_status": edited_cheque_status, # Will be None for cash
                                 "transaction_status": edited_transaction_status # Update 'transaction_status' column
                             }
-                            print("\n--- DEBUG: Edited Row before CSV write ---")
-                            print(df.loc[st.session_state['editing_row_idx']].to_dict())
-                            print("-------------------------------------------\n")
                             df.to_csv(CSV_FILE, index=False)
 
                             updated_df_after_edit = pd.read_csv(CSV_FILE, dtype={'reference_number': str}) # Re-read with dtype fix
-                            updated_df_after_edit = clean_payments_data(updated_df_after_edit) # <--- ADDED THIS LINE
-                            updated_df_after_edit.to_csv(CSV_FILE, index=False) # <--- ADDED THIS LINE TO SAVE CLEANED DF
+                            updated_df_after_edit = clean_payments_data(updated_df_after_edit)
+                            updated_df_after_edit.to_csv(CSV_FILE, index=False) # Save the cleaned DF
                             
                             generate_html_summary(updated_df_after_edit) # Pass the CLEANED df
                             git_push()
