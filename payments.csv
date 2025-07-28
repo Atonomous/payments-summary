@@ -4,3 +4,4 @@ date,person,amount,type,status,description,payment_method,cheque_status,transact
 10/07/2025,Shabbir,221500,i_paid,completed,To the vendor,cash,,completed,1452525,,,,
 10/07/2025,Shabbir,1230000,i_paid,completed,nan,cheque,processing,completed,completed,,,,
 28/07/2025,Zohaib,500,i_paid,completed,F&B,cash,1,,completed,,,,
+2025-07-28,Shabbir,9999.0,i_paid,completed,New Laptop Testing,cheque,18885854582,processing done,completed
