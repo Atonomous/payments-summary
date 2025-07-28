@@ -3,4 +3,4 @@ date,person,amount,type,status,description,payment_method,cheque_status,transact
 2025-07-28,Rizwan,2500.0,paid_to_me,completed,SAASDASD,cash,,completed,,,,,
 2025-07-28,Rizwan,2500.0,paid_to_me,completed,FirstAgain,cash,,completed,,,,,
 2025-07-28,Shabbir,7855.0,i_paid,completed,AgeChalluaGA?,cash,,completed,,,,,
-2025-07-28,Rizwan,2415.0,paid_to_me,completed,FirstAgain2,cash,75487547123,,completed
+2025-07-28,Rizwan,2415.0,paid_to_me,completed,FirstAgain2,cash,,completed,,,,,

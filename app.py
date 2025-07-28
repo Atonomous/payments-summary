@@ -66,8 +66,8 @@ def clean_payments_data(df):
     df['amount'] = pd.to_numeric(df['amount'], errors='coerce').fillna(0.0)
 
     # Convert date to YYYY-MM-DD format, coercing errors to NaT
-    # Use dayfirst=True to handle DD/MM/YYYY formats
-    df['date'] = pd.to_datetime(df['date'], errors='coerce', dayfirst=True).dt.strftime('%Y-%m-%d').fillna('')
+    # Removed dayfirst=True as dates are in YYYY-MM-DD
+    df['date'] = pd.to_datetime(df['date'], errors='coerce').dt.strftime('%Y-%m-%d').fillna('')
 
     # Rule 1: If payment_method is 'cash', cheque_status must be empty
     # Ensure payment_method is lowercased for comparison
@@ -206,8 +206,8 @@ def prepare_dataframe_for_display(df):
     df_display['amount'] = pd.to_numeric(df_display['amount'], errors='coerce').fillna(0.0)
 
     # Robust Date Formatting:
-    # Try to parse dates, coercing errors to NaT. Use dayfirst=True for DD/MM/YYYY.
-    df_display['date_parsed'] = pd.to_datetime(df_display['date'], errors='coerce', dayfirst=True)
+    # Try to parse dates, coercing errors to NaT. Removed dayfirst=True.
+    df_display['date_parsed'] = pd.to_datetime(df_display['date'], errors='coerce')
     # Format for display, filling NaT (Not a Time) with an empty string.
     df_display['formatted_date'] = df_display['date_parsed'].dt.strftime('%Y-%m-%d').fillna('')
 
