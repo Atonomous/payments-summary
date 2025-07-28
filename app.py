@@ -18,7 +18,7 @@ def init_state():
         'selected_transaction_type', 'payment_method', 'editing_row_idx', 'selected_person', 'reset_add_form',
         'add_amount', 'add_date', 'add_reference_number', 'add_cheque_status', 'add_status', 'add_description',
         'temp_edit_data', 'invoice_person_name', 'invoice_type', 'invoice_start_date', 'invoice_end_date',
-        'generated_invoice_pdf_path' # Updated for PDF
+        'generated_invoice_pdf_path', 'show_download_button' # Added show_download_button flag
     ]
     defaults = {
         'selected_transaction_type': 'Paid to Me',
@@ -34,10 +34,11 @@ def init_state():
         'add_description': '',
         'temp_edit_data': {}, # Initialize as empty dict
         'invoice_person_name': "Select...",
-        'invoice_type': 'all_transactions',
+        'invoice_type': 'Invoice for Person (All Transactions)', # Default to first option
         'invoice_start_date': datetime.now().date().replace(day=1), # Default to start of current month
         'invoice_end_date': datetime.now().date(), # Default to today
-        'generated_invoice_pdf_path': None # New default for PDF path
+        'generated_invoice_pdf_path': None, # New default for PDF path
+        'show_download_button': False # Default to not showing the download button
     }
     for k in keys:
         if k not in st.session_state:
@@ -1543,7 +1544,7 @@ with tab4:
     st.subheader("Generate Invoice")
 
     # Informational message for the user
-    st.info("💡 Please make all your selections (Person, Invoice Type, and Date Range if applicable) before clicking 'Generate Invoice'. The form updates on submission.")
+    st.info("💡 Please make all your selections (Person, Invoice Type, and Date Range if applicable) before clicking 'Generate Invoice'. The form elements update dynamically as you change the 'Invoice Type' selection.")
 
     try:
         people_df = pd.read_csv(PEOPLE_FILE)
@@ -1558,39 +1559,45 @@ with tab4:
 
     current_invoice_person_index = invoice_person_options.index(st.session_state['invoice_person_name'])
 
-    with st.form("invoice_form"):
-        st.session_state['invoice_person_name'] = st.selectbox(
-            "Select Person for Invoice",
-            invoice_person_options,
-            index=current_invoice_person_index,
-            key='invoice_person_select'
-        )
+    # These elements are now outside the form for real-time reactivity
+    st.session_state['invoice_person_name'] = st.selectbox(
+        "Select Person for Invoice",
+        invoice_person_options,
+        index=current_invoice_person_index,
+        key='invoice_person_select'
+    )
 
-        st.session_state['invoice_type'] = st.radio(
-            "Invoice Type",
-            ["Invoice for Person (All Transactions)", "Invoice for Specific Date Range"],
-            horizontal=True,
-            key='invoice_type_radio'
-        )
+    st.session_state['invoice_type'] = st.radio(
+        "Invoice Type",
+        ["Invoice for Person (All Transactions)", "Invoice for Specific Date Range"],
+        horizontal=True,
+        key='invoice_type_radio'
+    )
 
-        if st.session_state['invoice_type'] == "Invoice for Specific Date Range":
-            col_inv_date1, col_inv_date2 = st.columns(2)
-            with col_inv_date1:
-                st.session_state['invoice_start_date'] = st.date_input(
-                    "Start Date",
-                    value=st.session_state['invoice_start_date'],
-                    key='invoice_start_date_input'
-                )
-            with col_inv_date2:
-                st.session_state['invoice_end_date'] = st.date_input(
-                    "End Date",
-                    value=st.session_state['invoice_end_date'],
-                    key='invoice_end_date_input'
-                )
-        
+    if st.session_state['invoice_type'] == "Invoice for Specific Date Range":
+        col_inv_date1, col_inv_date2 = st.columns(2)
+        with col_inv_date1:
+            st.session_state['invoice_start_date'] = st.date_input(
+                "Start Date",
+                value=st.session_state['invoice_start_date'],
+                key='invoice_start_date_input'
+            )
+        with col_inv_date2:
+            st.session_state['invoice_end_date'] = st.date_input(
+                "End Date",
+                value=st.session_state['invoice_end_date'],
+                key='invoice_end_date_input'
+            )
+    
+    # The actual form for submission
+    with st.form("invoice_generation_submit_form"):
         generate_invoice_button = st.form_submit_button("Generate Invoice")
 
         if generate_invoice_button:
+            # When the button is clicked, reset the download button visibility
+            st.session_state['show_download_button'] = False
+            st.session_state['generated_invoice_pdf_path'] = None
+
             if st.session_state['invoice_person_name'] == "Select a person...":
                 st.warning("Please select a person to generate the invoice.")
             else:
@@ -1609,9 +1616,10 @@ with tab4:
 
                     filtered_invoice_transactions = pd.DataFrame() # Initialize empty DataFrame
 
+                    invoice_type_for_filename = "" # For meaningful filename
                     if st.session_state['invoice_type'] == "Invoice for Person (All Transactions)":
                         filtered_invoice_transactions = person_transactions_df
-                        invoice_type_display = "all_transactions"
+                        invoice_type_for_filename = "all_transactions"
                     else: # Invoice for Specific Date Range
                         start_date_str = st.session_state['invoice_start_date'].strftime('%Y-%m-%d')
                         end_date_str = st.session_state['invoice_end_date'].strftime('%Y-%m-%d')
@@ -1621,13 +1629,13 @@ with tab4:
                             (person_transactions_df['date'] >= start_date_str) &
                             (person_transactions_df['date'] <= end_date_str)
                         ]
-                        invoice_type_display = "specific_date_range"
+                        invoice_type_for_filename = "specific_date_range"
 
                     # Generate PDF using FPDF
                     pdf_file_path = generate_invoice_pdf(
                         st.session_state['invoice_person_name'],
                         filtered_invoice_transactions,
-                        invoice_type_display,
+                        invoice_type_for_filename, # Pass for filename logic
                         st.session_state['invoice_start_date'],
                         st.session_state['invoice_end_date']
                     )
@@ -1636,25 +1644,36 @@ with tab4:
 
                     if pdf_file_path:
                         st.success(f"Invoice generated successfully for {st.session_state['invoice_person_name']}!")
+                        st.session_state['show_download_button'] = True # Set flag to show download button
                         git_push() # Push the new invoice file to GitHub
-                        st.rerun() # Rerun to display the download button
+                        # No rerun here, let the natural Streamlit flow display the button
                     else:
                         st.error("Failed to generate PDF invoice.")
                     
                 except Exception as e:
                     st.error(f"Error generating invoice: {e}")
 
-    # Display generated invoice download button
-    if st.session_state['generated_invoice_pdf_path']:
+    # Display generated invoice download button and clear button
+    if st.session_state['show_download_button'] and st.session_state['generated_invoice_pdf_path']:
         st.markdown("---")
         st.subheader("Download Your Invoice")
-        with open(st.session_state['generated_invoice_pdf_path'], "rb") as file:
-            st.download_button(
-                label="Download Invoice PDF",
-                data=file,
-                file_name=os.path.basename(st.session_state['generated_invoice_pdf_path']),
-                mime="application/pdf"
-            )
+        
+        col_download, col_clear = st.columns([0.7, 0.3])
+        with col_download:
+            with open(st.session_state['generated_invoice_pdf_path'], "rb") as file:
+                st.download_button(
+                    label="Download Invoice PDF",
+                    data=file,
+                    file_name=os.path.basename(st.session_state['generated_invoice_pdf_path']),
+                    mime="application/pdf",
+                    key='download_invoice_pdf_button' # Unique key for the button
+                )
+        with col_clear:
+            if st.button("Clear Invoice", key='clear_invoice_button'):
+                st.session_state['generated_invoice_pdf_path'] = None
+                st.session_state['show_download_button'] = False
+                st.rerun() # Rerun to hide the download button
+
         st.info("Your PDF invoice has been generated and is ready for download. You can open it with any PDF viewer.")
 
 
