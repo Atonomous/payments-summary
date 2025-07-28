@@ -83,7 +83,7 @@ def prepare_dataframe_for_display(df):
     df_display['amount'] = pd.to_numeric(df_display['amount'], errors='coerce').fillna(0.0)
     
     # Format dates as YYYY-MM-DD for consistency with HTML date input and JavaScript comparison
-    df_display['formatted_date'] = pd.to_datetime(df_display['date']).dt.strftime('%Y-%m-%d')
+    df_display['formatted_date'] = pd.to_datetime(df_display['date'], format='%Y-%m-%d').dt.strftime('%Y-%m-%d')
 
     # Validate and format 'cheque_status' for display
     df_display['cheque_status_display'] = df_display.apply(lambda row: 
