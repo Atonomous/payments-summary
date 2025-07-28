@@ -1,1 +1,1 @@
-date,person,amount,type,status,description,payment_method,cheque_status,transaction_status,reference_number,amount_display,type_display,original_index,formatted_date,receipt_number
+date,person,amount,type,status,description,payment_method,cheque_status,transaction_status,reference_number,amount_display,type_display,original_index,formatted_date
