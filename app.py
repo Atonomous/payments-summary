@@ -204,6 +204,9 @@ def prepare_dataframe_for_display(df):
 
     # Convert amount to float and handle missing values for calculations
     df_display['amount'] = pd.to_numeric(df_display['amount'], errors='coerce').fillna(0.0)
+    # --- FIX: Explicitly create amount_display with formatting ---
+    df_display['amount_display'] = df_display['amount'].apply(lambda x: f"Rs. {x:,.2f}")
+    # --- END FIX ---
 
     # Robust Date Formatting:
     # Try to parse dates, coercing errors to NaT. Removed dayfirst=True.
