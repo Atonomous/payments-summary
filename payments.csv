@@ -1,3 +1,3 @@
 date,person,amount,type,status,description,payment_method,cheque_status,transaction_status,reference_number,amount_display,type_display,original_index,formatted_date
-2025-07-29,Zohaib,25000.0,i_paid,completed,FirstAgain9^4,cash,,completed,85454545,,,,
-2025-07-29,Shabbir,30000.0,i_paid,completed,FirstAgain99999,cheque,processing,completed,,,,,
+2025-07-29,Zohaib,25000.0,i_paid,completed,FirstAgain9^4,cash,,completed,85454545.0,,,,
+2025-07-29,Shabbir,30000.0,i_paid,completed,FirstAgain99999,cheque,processing,completed,85555.0,,,,
