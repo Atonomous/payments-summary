@@ -60,6 +60,7 @@ def clean_payments_data(df):
     for col in cols_to_check:
         if col not in df.columns:
             df[col] = '' # Add missing column with empty string default
+        # Ensure these columns are always strings and strip whitespace
         df[col] = df[col].astype(str).replace('nan', '').replace('None', '').str.strip()
 
     # Convert amount to numeric, coercing errors to NaN, then fill with 0.0
@@ -124,7 +125,10 @@ def init_files():
             ]).to_csv(CSV_FILE, index=False)
             st.toast(f"Created new {CSV_FILE}")
         else:
-            df = pd.read_csv(CSV_FILE)
+            # --- CRITICAL FIX: Force reference_number to be read as string ---
+            df = pd.read_csv(CSV_FILE, dtype={'reference_number': str})
+            # --- END CRITICAL FIX ---
+
             # Handle migration from old format to new format if needed
             if 'receipt_number' in df.columns or 'cheque_number' in df.columns:
                 df['reference_number'] = df.apply(
@@ -258,9 +262,9 @@ def prepare_dataframe_for_display(df):
     # Show if not empty and not a transaction status.
     # Also handle cases where a cheque status might have been mistakenly put here.
     df_display['reference_number_display'] = df_display.apply(
-        lambda row: str(row['reference_number']) if row['reference_number'] != '' and \
-                     row['reference_number'].lower() not in valid_transaction_statuses_lower and \
-                     row['reference_number'].lower() not in valid_cheque_statuses_lower else '-',
+        lambda row: str(row['reference_number']) if str(row['reference_number']).strip() != '' and \
+                     str(row['reference_number']).lower() not in valid_transaction_statuses_lower and \
+                     str(row['reference_number']).lower() not in valid_cheque_statuses_lower else '-',
         axis=1
     )
 
@@ -1045,14 +1049,14 @@ with tab1:
             if amount <= 0:
                 st.warning("Amount must be greater than 0.")
                 validation_passed = False
-            if not reference_number.strip():
+            if not str(reference_number).strip(): # Use str() to handle potential None/NaN from widget
                 if st.session_state['payment_method'] == "cheque":
-                    st.warning(f"🚨 Reference Number is **REQUIRED** for cheque transactions. Current value: '{reference_number.strip()}'")
+                    st.warning(f"🚨 Reference Number is **REQUIRED** for cheque transactions. Current value: '{str(reference_number).strip()}'")
                 else:
-                    st.warning(f"🚨 Reference Number is required. Current value: '{reference_number.strip()}'")
+                    st.warning(f"🚨 Reference Number is required. Current value: '{str(reference_number).strip()}'")
                 validation_passed = False
             else:
-                st.info(f"Reference Number captured for saving: '{reference_number.strip()}'")
+                st.info(f"Reference Number captured for saving: '{str(reference_number).strip()}'")
 
             if validation_passed:
                 try:
@@ -1064,14 +1068,17 @@ with tab1:
                         "status": status, # This 'status' column is redundant with 'transaction_status' but kept for compatibility
                         "description": description,
                         "payment_method": st.session_state['payment_method'],
-                        "reference_number": reference_number.strip(), # Strip whitespace
+                        "reference_number": str(reference_number).strip(), # Explicitly cast to string before saving
                         "cheque_status": cheque_status_val if st.session_state['payment_method'] == "cheque" else None,
                         "transaction_status": status # Use the selected status for transaction_status
                     }
+                    print("\n--- DEBUG: New Row before CSV write ---")
+                    print(new_row)
+                    print("---------------------------------------\n")
                     pd.DataFrame([new_row]).to_csv(CSV_FILE, mode='a', header=False, index=False)
                     
                     # Read the updated CSV and CLEAN IT before generating HTML
-                    updated_df = pd.read_csv(CSV_FILE)
+                    updated_df = pd.read_csv(CSV_FILE, dtype={'reference_number': str}) # Re-read with dtype fix
                     updated_df = clean_payments_data(updated_df) # <--- ADDED THIS LINE
                     updated_df.to_csv(CSV_FILE, index=False) # <--- ADDED THIS LINE TO SAVE CLEANED DF
 
@@ -1097,7 +1104,9 @@ with tab2:
     st.subheader("Transaction History")
 
     try:
-        df = pd.read_csv(CSV_FILE)
+        # --- CRITICAL FIX: Force reference_number to be read as string here too ---
+        df = pd.read_csv(CSV_FILE, dtype={'reference_number': str})
+        # --- END CRITICAL FIX ---
 
         # --- DEBUG PRINT (to console, not sidebar) ---
         print("\n--- DEBUG: Raw DataFrame from CSV (Head) ---")
@@ -1284,14 +1293,14 @@ with tab2:
                     if edited_amount <= 0:
                         st.warning("Amount must be greater than 0.")
                         validation_passed = False
-                    if not edited_reference_number.strip():
+                    if not str(edited_reference_number).strip(): # Use str() to handle potential None/NaN from widget
                         if edited_payment_method == "cheque":
-                            st.warning(f"🚨 Reference Number is **REQUIRED** for cheque transactions. Current value: '{edited_reference_number.strip()}'")
+                            st.warning(f"🚨 Reference Number is **REQUIRED** for cheque transactions. Current value: '{str(edited_reference_number).strip()}'")
                         else:
-                            st.warning(f"🚨 Reference Number is required. Current value: '{edited_reference_number.strip()}'")
+                            st.warning(f"🚨 Reference Number is required. Current value: '{str(edited_reference_number).strip()}'")
                         validation_passed = False
                     else:
-                        st.info(f"Reference Number captured for saving: '{edited_reference_number.strip()}'")
+                        st.info(f"Reference Number captured for saving: '{str(edited_reference_number).strip()}'")
 
                     if validation_passed:
                         try:
@@ -1303,13 +1312,16 @@ with tab2:
                                 "status": edited_transaction_status, # Update 'status' column (redundant but kept)
                                 "description": edited_description,
                                 "payment_method": edited_payment_method,
-                                "reference_number": edited_reference_number.strip(),
+                                "reference_number": str(edited_reference_number).strip(), # Explicitly cast to string
                                 "cheque_status": edited_cheque_status, # Will be None for cash
                                 "transaction_status": edited_transaction_status # Update 'transaction_status' column
                             }
+                            print("\n--- DEBUG: Edited Row before CSV write ---")
+                            print(df.loc[st.session_state['editing_row_idx']].to_dict())
+                            print("-------------------------------------------\n")
                             df.to_csv(CSV_FILE, index=False)
 
-                            updated_df_after_edit = pd.read_csv(CSV_FILE)
+                            updated_df_after_edit = pd.read_csv(CSV_FILE, dtype={'reference_number': str}) # Re-read with dtype fix
                             updated_df_after_edit = clean_payments_data(updated_df_after_edit) # <--- ADDED THIS LINE
                             updated_df_after_edit.to_csv(CSV_FILE, index=False) # <--- ADDED THIS LINE TO SAVE CLEANED DF
                             
@@ -1396,7 +1408,7 @@ with tab3:
 st.sidebar.header("Current Balances")
 try:
     if os.path.exists(CSV_FILE):
-        df_bal = pd.read_csv(CSV_FILE)
+        df_bal = pd.read_csv(CSV_FILE, dtype={'reference_number': str}) # Apply dtype fix here too
         if not df_bal.empty:
             # Ensure columns are treated as strings and amounts as numeric for calculations
             df_bal['amount'] = pd.to_numeric(df_bal['amount'], errors='coerce').fillna(0.0)
