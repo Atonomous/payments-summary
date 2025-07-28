@@ -105,12 +105,10 @@ def clean_payments_data(df):
         else: # For cash payments, ensure cheque_status is empty
             df.loc[index, 'cheque_status'] = ''
 
-    # --- FIX: Removed numeric conversion for 'reference_number' to preserve leading zeros ---
     # The reference_number column should always be treated as a string,
     # so no float conversion is needed here.
     # The initial read with dtype={'reference_number': str} and the apply
     # for 'nan'/'None' should be sufficient.
-    # --- END FIX ---
 
     # Remove rows where 'date', 'person', 'amount' are all empty/zero after cleaning
     df = df[~((df['date'] == '') & (df['person'] == '') & (df['amount'] == 0.0))]
@@ -642,6 +640,17 @@ def generate_html_summary(df):
         }}
     </style>
     <script>
+        $(document).ready(function() {{
+            // Set default date range on load
+            const today = new Date();
+            const oneMonthAgo = new Date();
+            oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+            $('#start-date').val(oneMonthAgo.toISOString().split('T')[0]);
+            $('#end-date').val(today.toISOString().split('T')[0]);
+
+            applyFilters(); // Apply filters immediately on page load with default dates
+        }});
+
         function applyFilters() {{
             const startDate = $('#start-date').val();
             const endDate = $('#end-date').val();
@@ -649,6 +658,14 @@ def generate_html_summary(df):
             const type = $('#type-filter').val();
             const method = $('#method-filter').val().toLowerCase();
             const chequeStatus = $('#status-filter').val().toLowerCase();
+
+            console.log("--- Applying Filters ---");
+            console.log("Start Date:", startDate);
+            console.log("End Date:", endDate);
+            console.log("Person Filter:", person);
+            console.log("Type Filter:", type);
+            console.log("Method Filter:", method);
+            console.log("Cheque Status Filter:", chequeStatus);
 
             let visibleRows = 0;
 
@@ -658,6 +675,8 @@ def generate_html_summary(df):
                 const rowType = $(this).data('type');
                 const rowMethod = $(this).data('method').toString().toLowerCase();
                 const rowChequeStatus = $(this).data('cheque-status').toString().toLowerCase();
+
+                console.log("Processing Row:", {{ rowDate, rowPerson, rowType, rowMethod, rowChequeStatus }});
 
                 // Date filter: Compare YYYY-MM-DD strings directly
                 const datePass = (!startDate || rowDate >= startDate) && (!endDate || rowDate <= endDate);
@@ -678,8 +697,10 @@ def generate_html_summary(df):
                 if (datePass && personPass && typePass && methodPass && chequeStatusPass) {{
                     $(this).show();
                     visibleRows++;
+                    console.log("Row PASSED filters.");
                 }} else {{
                     $(this).hide();
+                    console.log("Row FAILED filters.");
                 }}
             }});
 
@@ -687,26 +708,31 @@ def generate_html_summary(df):
             if (visibleRows === 0) {{
                 $('#no-results').show();
                 $('#transactions-table').hide();
+                console.log("No results found.");
             }} else {{
                 $('#no-results').hide();
                 $('#transactions-table').show();
+                console.log(visibleRows + " results found.");
             }}
+            console.log("--- Filters Applied ---");
         }}
 
         function resetFilters() {{
-            $('.filter-group select').val('');
-            $('.date-filter').val('');
-            $('#transactions-table tbody tr').show();
-            $('#no-results').hide();
-            $('#transactions-table').show();
-            // Reset to default date range
+            // Reset select inputs
+            $('#name-filter').val('');
+            $('#type-filter').val('');
+            $('#method-filter').val('');
+            $('#status-filter').val('');
+
+            // Reset date inputs to default range
             const today = new Date();
             const oneMonthAgo = new Date();
             oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
             $('#start-date').val(oneMonthAgo.toISOString().split('T')[0]);
             $('#end-date').val(today.toISOString().split('T')[0]);
+            
             applyFilters(); // Apply filters after resetting
-        }});
+        }}
     </script>
 </head>
 <body>

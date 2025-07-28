@@ -3,3 +3,4 @@ date,person,amount,type,status,description,payment_method,reference_number,chequ
 2025-07-29,Shabbir,3600.0,i_paid,completed,FirstAgainBlackBox,cheque,1,processing,completed
 2025-07-29,Rizwan,7200.0,paid_to_me,completed,NoOneDeletes,cash,21014,,completed
 2025-07-29,Rizwan,2800.0,paid_to_me,completed,FirstAgain,cash,00000000012,,completed
+2025-07-29,Zohaib,2800.0,i_paid,completed,FirstAgain99,cheque,75487547213756,received/given,completed

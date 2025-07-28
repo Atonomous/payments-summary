@@ -339,6 +339,17 @@
         }
     </style>
     <script>
+        $(document).ready(function() {
+            // Set default date range on load
+            const today = new Date();
+            const oneMonthAgo = new Date();
+            oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+            $('#start-date').val(oneMonthAgo.toISOString().split('T')[0]);
+            $('#end-date').val(today.toISOString().split('T')[0]);
+
+            applyFilters(); // Apply filters immediately on page load with default dates
+        });
+
         function applyFilters() {
             const startDate = $('#start-date').val();
             const endDate = $('#end-date').val();
@@ -346,6 +357,14 @@
             const type = $('#type-filter').val();
             const method = $('#method-filter').val().toLowerCase();
             const chequeStatus = $('#status-filter').val().toLowerCase();
+
+            console.log("--- Applying Filters ---");
+            console.log("Start Date:", startDate);
+            console.log("End Date:", endDate);
+            console.log("Person Filter:", person);
+            console.log("Type Filter:", type);
+            console.log("Method Filter:", method);
+            console.log("Cheque Status Filter:", chequeStatus);
 
             let visibleRows = 0;
 
@@ -355,6 +374,8 @@
                 const rowType = $(this).data('type');
                 const rowMethod = $(this).data('method').toString().toLowerCase();
                 const rowChequeStatus = $(this).data('cheque-status').toString().toLowerCase();
+
+                console.log("Processing Row:", { rowDate, rowPerson, rowType, rowMethod, rowChequeStatus });
 
                 // Date filter: Compare YYYY-MM-DD strings directly
                 const datePass = (!startDate || rowDate >= startDate) && (!endDate || rowDate <= endDate);
@@ -375,8 +396,10 @@
                 if (datePass && personPass && typePass && methodPass && chequeStatusPass) {
                     $(this).show();
                     visibleRows++;
+                    console.log("Row PASSED filters.");
                 } else {
                     $(this).hide();
+                    console.log("Row FAILED filters.");
                 }
             });
 
@@ -384,26 +407,31 @@
             if (visibleRows === 0) {
                 $('#no-results').show();
                 $('#transactions-table').hide();
+                console.log("No results found.");
             } else {
                 $('#no-results').hide();
                 $('#transactions-table').show();
+                console.log(visibleRows + " results found.");
             }
+            console.log("--- Filters Applied ---");
         }
 
         function resetFilters() {
-            $('.filter-group select').val('');
-            $('.date-filter').val('');
-            $('#transactions-table tbody tr').show();
-            $('#no-results').hide();
-            $('#transactions-table').show();
-            // Reset to default date range
+            // Reset select inputs
+            $('#name-filter').val('');
+            $('#type-filter').val('');
+            $('#method-filter').val('');
+            $('#status-filter').val('');
+
+            // Reset date inputs to default range
             const today = new Date();
             const oneMonthAgo = new Date();
             oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
             $('#start-date').val(oneMonthAgo.toISOString().split('T')[0]);
             $('#end-date').val(today.toISOString().split('T')[0]);
+            
             applyFilters(); // Apply filters after resetting
-        });
+        }
     </script>
 </head>
 <body>
@@ -414,7 +442,7 @@
             </div>
             <h1 class="report-title">Payment Summary Report</h1>
             <div class="report-date">
-                <i class="far fa-calendar-alt"></i> July 29, 2025 at 01:29 AM
+                <i class="far fa-calendar-alt"></i> July 29, 2025 at 01:41 AM
             </div>
         </header>
 
@@ -443,12 +471,12 @@
                     </div>
                     <div>
                         <div class="card-title">Total Paid</div>
-                        <div class="card-amount">Rs.7,200.00</div>
+                        <div class="card-amount">Rs.10,000.00</div>
                     </div>
                 </div>
                 <div class="card-details">
                     <div><i class="fas fa-coins"></i> Cash: Rs.0.00</div>
-                    <div><i class="fas fa-money-check-alt"></i> Cheque: Rs.7,200.00</div>
+                    <div><i class="fas fa-money-check-alt"></i> Cheque: Rs.10,000.00</div>
                     <div><i class="fas fa-clock"></i> Pending: Rs.0.00</div>
                 </div>
             </div>
@@ -460,7 +488,7 @@
                     </div>
                     <div>
                         <div class="card-title">Net Balance</div>
-                        <div class="card-amount">Rs.2,800.00</div>
+                        <div class="card-amount">Rs.0.00</div>
                     </div>
                 </div>
                 <div class="card-details">
@@ -616,6 +644,21 @@
                     <td>00000000012</td>
                     <td><span class="status completed">Completed</span></td>
                     <td>FirstAgain</td>
+                </tr>
+                <tr data-date="2025-07-29"
+                    data-person="Zohaib"
+                    data-type="i_paid"
+                    data-method="cheque"
+                    data-cheque-status="received/given">
+                    <td>2025-07-29</td>
+                    <td>Zohaib</td>
+                    <td>Rs. 2,800.00</td>
+                    <td>Paid</td>
+                    <td>Cheque</td>
+                    <td><span class="status received-given">Received/given</span></td>
+                    <td>75487547213756</td>
+                    <td><span class="status completed">Completed</span></td>
+                    <td>FirstAgain99</td>
                 </tr>
             </tbody>
         </table>
