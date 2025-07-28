@@ -1061,6 +1061,10 @@ def generate_invoice_pdf(person_name, transactions_df, invoice_type_display, sta
 
         pdf_file_path = os.path.join(INVOICE_DIR, pdf_filename)
         pdf.output(pdf_file_path)
+
+        # --- Debugging print statement ---
+        print(f"DEBUG: PDF file saved locally as: {pdf_file_path}")
+        # --- End debugging print statement ---
         
         st.toast(f"PDF invoice generated at {pdf_file_path}")
         return pdf_file_path
@@ -1658,6 +1662,10 @@ with tab4:
         st.markdown("---")
         st.subheader("Download Your Invoice")
         
+        # --- Debugging UI display of filename ---
+        st.write(f"Intended Download Filename: `{os.path.basename(st.session_state['generated_invoice_pdf_path'])}`")
+        # --- End debugging UI display ---
+
         col_download, col_clear = st.columns([0.7, 0.3])
         with col_download:
             with open(st.session_state['generated_invoice_pdf_path'], "rb") as file:
