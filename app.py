@@ -16,6 +16,10 @@ valid_cheque_statuses_lower = ["received/given", "processing", "bounced", "proce
 valid_transaction_statuses_lower = ["completed", "pending"]
 
 def init_files():
+    """
+    Initializes payments.csv and people.csv if they don't exist.
+    Also handles migration of old column names and ensures 'category' in people.csv.
+    """
     try:
         # Initialize payments.csv if it doesn't exist
         if not os.path.exists(CSV_FILE):
@@ -28,125 +32,164 @@ def init_files():
         else:
             # Handle migration from old format to new format if needed
             df = pd.read_csv(CSV_FILE)
+            # Check for old columns and migrate to 'reference_number'
             if 'receipt_number' in df.columns or 'cheque_number' in df.columns:
                 df['reference_number'] = df.apply(
-                    lambda row: row['receipt_number'] if row['payment_method'] == 'cash' 
-                    else row['cheque_number'] if row['payment_method'] == 'cheque' 
-                    else '', 
+                    lambda row: row['receipt_number'] if row['payment_method'] == 'cash'
+                    else (row['cheque_number'] if row['payment_method'] == 'cheque' else ''),
                     axis=1
-                )
+                ).fillna('') # Fill NaN with empty string after migration
                 df = df.drop(columns=['receipt_number', 'cheque_number'], errors='ignore')
                 df.to_csv(CSV_FILE, index=False)
+                st.toast("Migrated old reference number columns.")
+            
+            # Ensure all expected columns exist in payments.csv
+            expected_payment_cols = [
+                "date", "person", "amount", "type", "status",
+                "description", "payment_method", "reference_number",
+                "cheque_status", "transaction_status"
+            ]
+            for col in expected_payment_cols:
+                if col not in df.columns:
+                    df[col] = '' # Add missing column with empty string default
+            df.to_csv(CSV_FILE, index=False) # Save back with any new columns
 
-        # Initialize people.csv if it doesn.t exist
+        # Initialize people.csv if it doesn't exist
         if not os.path.exists(PEOPLE_FILE):
             pd.DataFrame(columns=["name", "category"]).to_csv(PEOPLE_FILE, index=False)
             st.toast(f"Created new {PEOPLE_FILE}")
         else:
             df = pd.read_csv(PEOPLE_FILE)
             if 'category' not in df.columns:
-                df['category'] = 'client'
+                df['category'] = 'client' # Default category
                 df.to_csv(PEOPLE_FILE, index=False)
+            df['name'] = df['name'].astype(str) # Ensure name is string
+            df.to_csv(PEOPLE_FILE, index=False) # Save back
     except Exception as e:
         st.error(f"Error initializing files: {e}")
 
+# Call init_files at the start of the script to ensure files are ready
 init_files()
 
 def git_push():
+    """
+    Performs a Git add, commit, and push operation.
+    """
     try:
         repo = Repo(REPO_PATH)
-        repo.git.add(update=True)
+        repo.git.add(update=True) # Add all modified files
         repo.index.commit("Automated update: payment records")
         origin = repo.remote(name='origin')
         origin.push()
+        st.success("GitHub updated successfully!")
     except Exception as e:
         st.error(f"Error updating GitHub: {e}")
+        st.warning("Please ensure you have configured Git and have push access to the repository.")
 
 def prepare_dataframe_for_display(df):
     """
     Prepares the DataFrame for display by ensuring correct data types,
     handling missing values, and validating/formatting specific columns.
     This function creates new columns for display purposes without altering
-    the original DataFrame's data.
+    the original DataFrame's data. It's designed to be robust against
+    inconsistent data entries in the CSV.
     """
     df_display = df.copy()
 
     # Ensure columns are strings and handle common NaN/None representations
-    for col in ['reference_number', 'cheque_status', 'transaction_status', 'payment_method', 'description', 'person']:
+    # Fill NaN/None with empty strings for consistent string operations
+    for col in ['reference_number', 'cheque_status', 'transaction_status', 'payment_method', 'description', 'person', 'type', 'status']:
         if col in df_display.columns:
-            # Apply .str.strip() to handle Series of strings
             df_display[col] = df_display[col].astype(str).replace('nan', '').replace('None', '').str.strip()
         else:
             df_display[col] = '' # Add missing column if it doesn't exist
 
     # Convert amount to float and handle missing values for calculations
     df_display['amount'] = pd.to_numeric(df_display['amount'], errors='coerce').fillna(0.0)
-    
-    # Format dates as YYYY-MM-DD for consistency with HTML date input and JavaScript comparison
-    df_display['formatted_date'] = pd.to_datetime(df_display['date'], format='%Y-%m-%d').dt.strftime('%Y-%m-%d')
 
-    # Validate and format 'cheque_status' for display
-    df_display['cheque_status_display'] = df_display.apply(lambda row: 
-        str(row['cheque_status']).capitalize() if row['payment_method'].lower() == 'cheque' and str(row['cheque_status']).lower() in valid_cheque_statuses_lower else '-',
+    # Robust Date Formatting:
+    # Try to parse dates, coercing errors to NaT. Use dayfirst=True for DD/MM/YYYY.
+    df_display['date_parsed'] = pd.to_datetime(df_display['date'], errors='coerce', dayfirst=True)
+    # Format for display, filling NaT (Not a Time) with an empty string.
+    df_display['formatted_date'] = df_display['date_parsed'].dt.strftime('%Y-%m-%d').fillna('')
+
+    # Robust Cheque Status Display:
+    # If payment method is 'cash', force cheque_status_display to '-'.
+    # Otherwise, validate against valid_cheque_statuses_lower.
+    df_display['cheque_status_display'] = df_display.apply(
+        lambda row: '-' if row['payment_method'].lower() == 'cash' else (
+            str(row['cheque_status']).capitalize() if str(row['cheque_status']).lower() in valid_cheque_statuses_lower else '-'
+        ), axis=1
+    )
+
+    # Robust Transaction Status Display:
+    # Validate against valid_transaction_statuses_lower.
+    df_display['transaction_status_display'] = df_display.apply(
+        lambda row: str(row['transaction_status']).capitalize() if str(row['transaction_status']).lower() in valid_transaction_statuses_lower else '-',
         axis=1
     )
 
-    # Validate and format 'transaction_status' for display
-    df_display['transaction_status_display'] = df_display.apply(lambda row:
-        str(row['transaction_status']).capitalize() if str(row['transaction_status']).lower() in valid_transaction_statuses_lower else '-',
+    # Robust Reference Number Display:
+    # Show if not empty and not a transaction status.
+    # Also handle cases where a cheque status might have been mistakenly put here.
+    df_display['reference_number_display'] = df_display.apply(
+        lambda row: str(row['reference_number']) if row['reference_number'] != '' and \
+                     row['reference_number'].lower() not in valid_transaction_statuses_lower and \
+                     row['reference_number'].lower() not in valid_cheque_statuses_lower else '-',
         axis=1
     )
 
-    # Format 'reference_number' for display:
-    # Show if not empty and not a transaction status
-    df_display['reference_number_display'] = df_display.apply(lambda row:
-        str(row['reference_number']) if row['reference_number'] != '' and row['reference_number'].lower() not in valid_transaction_statuses_lower else '-',
-        axis=1
-    )
-    
-    # Format amount for display
-    df_display['amount_display'] = df_display['amount'].apply(lambda x: f"Rs. {x:,.2f}")
-    
-    # Format type for display
-    df_display['type_display'] = df_display['type'].map({'paid_to_me': 'Received', 'i_paid': 'Paid'})
-    
+    # Format 'type' for display ('paid_to_me' -> 'Received', 'i_paid' -> 'Paid')
+    df_display['type_display'] = df_display['type'].map({'paid_to_me': 'Received', 'i_paid': 'Paid'}).fillna('')
+
     return df_display
 
+
 def generate_html_summary(df):
+    """
+    Generates an HTML summary report based on the provided DataFrame.
+    """
     try:
-        # Prepare DataFrame for HTML display
+        # Prepare DataFrame for HTML display using the robust function
         transactions_display = prepare_dataframe_for_display(df)
-        
+
         # Calculate payment totals from the original (unmodified) DataFrame for accuracy
-        # (or from df_display if amount column is guaranteed correct)
+        # Ensure 'amount' is numeric for calculations
         df_for_totals = df.copy()
         df_for_totals['amount'] = pd.to_numeric(df_for_totals['amount'], errors='coerce').fillna(0.0)
+        df_for_totals['type'] = df_for_totals['type'].astype(str).str.lower()
+        df_for_totals['payment_method'] = df_for_totals['payment_method'].astype(str).str.lower()
+        df_for_totals['transaction_status'] = df_for_totals['transaction_status'].astype(str).str.lower()
 
         payment_totals = df_for_totals.groupby(['type', 'payment_method'])['amount'].sum().unstack().fillna(0)
-        
+
         # Prepare summary statistics
         totals = {
             'total_received': df_for_totals[df_for_totals['type'] == 'paid_to_me']['amount'].sum(),
-            'pending_received': df_for_totals[(df_for_totals['type'] == 'paid_to_me') & 
-                                  (df_for_totals['transaction_status'] == 'pending')]['amount'].sum(),
+            'pending_received': df_for_totals[(df_for_totals['type'] == 'paid_to_me') &
+                                              (df_for_totals['transaction_status'] == 'pending')]['amount'].sum(),
             'total_paid': df_for_totals[df_for_totals['type'] == 'i_paid']['amount'].sum(),
-            'pending_paid': df_for_totals[(df_for_totals['type'] == 'i_paid') & 
-                               (df_for_totals['transaction_status'] == 'pending')]['amount'].sum(),
-            'cash_received': payment_totals.loc['paid_to_me', 'cash'] 
-                             if 'cash' in payment_totals.columns and 'paid_to_me' in payment_totals.index 
+            'pending_paid': df_for_totals[(df_for_totals['type'] == 'i_paid') &
+                                          (df_for_totals['transaction_status'] == 'pending')]['amount'].sum(),
+            'cash_received': payment_totals.loc['paid_to_me', 'cash']
+                             if 'cash' in payment_totals.columns and 'paid_to_me' in payment_totals.index
                              else 0,
-            'cheque_received': payment_totals.loc['paid_to_me', 'cheque'] 
-                               if 'cheque' in payment_totals.columns and 'paid_to_me' in payment_totals.index 
+            'cheque_received': payment_totals.loc['paid_to_me', 'cheque']
+                               if 'cheque' in payment_totals.columns and 'paid_to_me' in payment_totals.index
                                else 0,
-            'cash_paid': payment_totals.loc['i_paid', 'cash'] 
-                          if 'cash' in payment_totals.columns and 'i_paid' in payment_totals.index 
+            'cash_paid': payment_totals.loc['i_paid', 'cash']
+                          if 'cash' in payment_totals.columns and 'i_paid' in payment_totals.index
                           else 0,
-            'cheque_paid': payment_totals.loc['i_paid', 'cheque'] 
-                            if 'cheque' in payment_totals.columns and 'i_paid' in payment_totals.index 
+            'cheque_paid': payment_totals.loc['i_paid', 'cheque']
+                            if 'cheque' in payment_totals.columns and 'i_paid' in payment_totals.index
                             else 0,
-            'net_balance': (df_for_totals[df_for_totals['type'] == 'paid_to_me']['amount'].sum() - 
+            'net_balance': (df_for_totals[df_for_totals['type'] == 'paid_to_me']['amount'].sum() -
                            df_for_totals[df_for_totals['type'] == 'i_paid']['amount'].sum())
         }
+
+        # Read people data for filters
+        people_df = pd.read_csv(PEOPLE_FILE)
+        person_options_html = ''.join(f'<option value="{name}">{name}</option>' for name in sorted(people_df['name'].unique()))
 
         # Generate HTML with premium styling and filters
         html = f"""<!DOCTYPE html>
@@ -495,34 +538,34 @@ def generate_html_summary(df):
             const endDate = $('#end-date').val();
             const person = $('#name-filter').val().toLowerCase();
             const type = $('#type-filter').val();
-            const method = $('#method-filter').val().toLowerCase(); 
+            const method = $('#method-filter').val().toLowerCase();
             const chequeStatus = $('#status-filter').val().toLowerCase();
-            
+
             let visibleRows = 0;
-            
+
             $('#transactions-table tbody tr').each(function() {{
                 const rowDate = $(this).data('date'); // This will be YYYY-MM-DD
                 const rowPerson = $(this).data('person').toString().toLowerCase();
                 const rowType = $(this).data('type');
                 const rowMethod = $(this).data('method').toString().toLowerCase();
                 const rowChequeStatus = $(this).data('cheque-status').toString().toLowerCase();
-                
+
                 // Date filter: Compare YYYY-MM-DD strings directly
                 const datePass = (!startDate || rowDate >= startDate) && (!endDate || rowDate <= endDate);
-                
+
                 // Person filter
                 const personPass = !person || rowPerson.includes(person);
-                
+
                 // Type filter
                 const typePass = !type || rowType === type;
-                
+
                 // Method filter
-                const methodPass = !method || rowMethod === method; 
-                
+                const methodPass = !method || rowMethod === method;
+
                 // Cheque status filter
-                const chequeStatusPass = !chequeStatus || 
+                const chequeStatusPass = !chequeStatus ||
                                       (rowChequeStatus && rowChequeStatus.includes(chequeStatus));
-                
+
                 if (datePass && personPass && typePass && methodPass && chequeStatusPass) {{
                     $(this).show();
                     visibleRows++;
@@ -530,7 +573,7 @@ def generate_html_summary(df):
                     $(this).hide();
                 }}
             }});
-            
+
             // Show/hide no results message
             if (visibleRows === 0) {{
                 $('#no-results').show();
@@ -540,7 +583,7 @@ def generate_html_summary(df):
                 $('#transactions-table').show();
             }}
         }}
-        
+
         function resetFilters() {{
             $('.filter-group select').val('');
             $('.date-filter').val('');
@@ -553,29 +596,30 @@ def generate_html_summary(df):
             oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
             $('#start-date').val(oneMonthAgo.toISOString().split('T')[0]);
             $('#end-date').val(today.toISOString().split('T')[0]);
+            applyFilters(); // Apply filters after resetting
         }}
-        
+
         // Initialize date pickers with reasonable defaults
         $(document).ready(function() {{
             const today = new Date();
             const oneMonthAgo = new Date();
             oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
-            
+
             $('#start-date').val(oneMonthAgo.toISOString().split('T')[0]);
             $('#end-date').val(today.toISOString().split('T')[0]);
-            
+
             // Apply filters when dropdowns change
             $('.filter-group select').change(function() {{
                 applyFilters();
             }});
-            
+
             // Apply filters when date inputs change
             $('.date-filter').change(function() {{
                 applyFilters();
             }});
-            
+
             // Initial filter application on load
-            applyFilters(); 
+            applyFilters();
         }});
     </script>
 </head>
@@ -590,7 +634,7 @@ def generate_html_summary(df):
                 <i class="far fa-calendar-alt"></i> {datetime.now().strftime('%B %d, %Y at %I:%M %p')}
             </div>
         </header>
-        
+
         <div class="summary-cards">
             <div class="card received">
                 <div class="card-header">
@@ -608,7 +652,7 @@ def generate_html_summary(df):
                     <div><i class="fas fa-clock"></i> Pending: Rs.{totals['pending_received']:,.2f}</div>
                 </div>
             </div>
-            
+
             <div class="card paid">
                 <div class="card-header">
                     <div class="card-icon">
@@ -625,7 +669,7 @@ def generate_html_summary(df):
                     <div><i class="fas fa-clock"></i> Pending: Rs.{totals['pending_paid']:,.2f}</div>
                 </div>
             </div>
-            
+
             <div class="card balance">
                 <div class="card-header">
                     <div class="card-icon">
@@ -639,19 +683,19 @@ def generate_html_summary(df):
                 <div class="card-details">
                     <div><i class="fas fa-info-circle"></i> Received - Paid</div>
                     <div style="margin-top: 10px;">
-                        {'<span style="color: #28a745;"><i class="fas fa-check-circle"></i> Positive Balance</span>' 
-                         if totals['net_balance'] >= 0 
+                        {'<span style="color: #28a745;"><i class="fas fa-check-circle"></i> Positive Balance</span>'
+                         if totals['net_balance'] >= 0
                          else '<span style="color: #dc3545;"><i class="fas fa-exclamation-circle"></i> Negative Balance</span>'}
                     </div>
                 </div>
             </div>
         </div>
-        
+
         <div class="filters">
             <h2 class="section-title">
                 <i class="fas fa-filter"></i> Filters
             </h2>
-            
+
             <div class="filter-grid">
                 <div class="filter-group">
                     <label for="start-date">Date Range</label>
@@ -659,15 +703,15 @@ def generate_html_summary(df):
                     <span style="display: inline-block; margin: 0 5px; font-size: 12px;">to</span>
                     <input type="date" id="end-date" class="date-filter">
                 </div>
-                
+
                 <div class="filter-group">
                     <label for="name-filter">Person</label>
                     <select id="name-filter">
                         <option value="">All</option>
-                        {''.join(f'<option value="{name}">{name}</option>' for name in sorted(df['person'].unique()))}
+                        {person_options_html}
                     </select>
                 </div>
-                
+
                 <div class="filter-group">
                     <label for="type-filter">Transaction Type</label>
                     <select id="type-filter">
@@ -676,7 +720,7 @@ def generate_html_summary(df):
                         <option value="i_paid">Paid</option>
                     </select>
                 </div>
-                
+
                 <div class="filter-group">
                     <label for="method-filter">Payment Method</label>
                     <select id="method-filter">
@@ -685,7 +729,7 @@ def generate_html_summary(df):
                         <option value="cheque">Cheque</option>
                     </select>
                 </div>
-                
+
                 <div class="filter-group">
                     <label for="status-filter">Cheque Status</label>
                     <select id="status-filter">
@@ -697,7 +741,7 @@ def generate_html_summary(df):
                     </select>
                 </div>
             </div>
-            
+
             <div class="filter-actions">
                 <button class="filter-btn" onclick="applyFilters()">
                     <i class="fas fa-filter"></i> Apply Filters
@@ -707,16 +751,16 @@ def generate_html_summary(df):
                 </button>
             </div>
         </div>
-        
+
         <h2 class="section-title">
             <i class="fas fa-list"></i> All Transactions
         </h2>
-        
+
         <div class="no-results" id="no-results">
             <i class="fas fa-search" style="font-size: 24px; margin-bottom: 10px;"></i>
             <p>No transactions match your filters</p>
         </div>
-        
+
         <table id="transactions-table">
             <thead>
                 <tr>
@@ -725,8 +769,8 @@ def generate_html_summary(df):
                     <th>Amount</th>
                     <th>Type</th>
                     <th>Method</th>
-                    <th>Cheque Status</th> <!-- Swapped positions -->
-                    <th>Reference No.</th> <!-- Swapped positions -->
+                    <th>Cheque Status</th>
+                    <th>Reference No.</th>
                     <th>Status</th>
                     <th>Description</th>
                 </tr>
@@ -734,17 +778,17 @@ def generate_html_summary(df):
             <tbody>"""
 
         # Add transaction rows with correct column data using the prepared DataFrame
-        for _, row in transactions_display.iterrows():
+        for idx, row in transactions_display.iterrows():
             # Use the _display columns for values and classes
             cheque_status_class = str(row['cheque_status_display']).lower().replace(' ', '-').replace('/', '-') if row['cheque_status_display'] != '-' else ''
             status_class = str(row['transaction_status_display']).lower().replace(' ', '-') if row['transaction_status_display'] != '-' else ''
-            
+
             html += f"""
-                <tr data-date="{row['formatted_date']}" 
-                    data-person="{row['person']}" 
-                    data-type="{row['type']}" 
-                    data-method="{str(row['payment_method']).lower()}" 
-                    data-cheque-status="{str(row['cheque_status']).lower() if pd.notna(row['cheque_status']) else ''}">
+                <tr data-date="{row['formatted_date']}"
+                    data-person="{row['person']}"
+                    data-type="{row['type']}"
+                    data-method="{str(row['payment_method']).lower()}"
+                    data-cheque-status="{str(row['cheque_status_cleaned']).lower() if pd.notna(row['cheque_status_cleaned']) else ''}">
                     <td>{row['formatted_date']}</td>
                     <td>{row['person']}</td>
                     <td>{row['amount_display']}</td>
@@ -759,7 +803,7 @@ def generate_html_summary(df):
         html += """
             </tbody>
         </table>
-        
+
         <div class="footer">
             <p><i class="fas fa-file-alt"></i> This report was automatically generated by Payment Tracker System</p>
             <p><i class="far fa-copyright"></i> {datetime.now().year} All Rights Reserved</p>
@@ -772,6 +816,7 @@ def generate_html_summary(df):
         os.makedirs(os.path.dirname(SUMMARY_FILE), exist_ok=True)
         with open(SUMMARY_FILE, "w", encoding="utf-8") as f:
             f.write(html)
+        st.toast("HTML summary generated successfully!")
     except Exception as e:
         st.error(f"Error generating HTML summary: {e}")
 
@@ -798,10 +843,19 @@ def init_state():
 init_state()
 
 def reset_form_session_state_for_add_transaction():
+    """Resets session state variables for the 'Add Transaction' form."""
     st.session_state['selected_transaction_type'] = 'Paid to Me'
     st.session_state['payment_method'] = 'cash'
     st.session_state['selected_person'] = "Select..."
-    st.session_state['editing_row_idx'] = None
+    st.session_state['editing_row_idx'] = None # Ensure edit mode is off
+    # Clear form inputs by setting their keys to default values if they exist in session_state
+    if 'add_amount' in st.session_state: st.session_state['add_amount'] = 0.0
+    if 'add_date' in st.session_state: st.session_state['add_date'] = datetime.now().date()
+    if 'add_reference_number' in st.session_state: st.session_state['add_reference_number'] = ''
+    if 'add_cheque_status' in st.session_state: st.session_state['add_cheque_status'] = 'received/given'
+    if 'add_status' in st.session_state: st.session_state['add_status'] = 'completed'
+    if 'add_description' in st.session_state: st.session_state['add_description'] = ''
+
 
 tab1, tab2, tab3 = st.tabs(["Add Transaction", "View Transactions", "Manage People"])
 
@@ -820,31 +874,39 @@ with tab1:
     try:
         people_df = pd.read_csv(PEOPLE_FILE)
         category = 'investor' if st.session_state['selected_transaction_type'] == "Paid to Me" else 'client'
-        filtered_people = people_df[people_df['category'] == category]['name'].tolist()
+        # Ensure 'name' is treated as string before filtering
+        filtered_people = people_df[people_df['category'] == category]['name'].astype(str).tolist()
     except Exception as e:
         st.error(f"Error loading people data: {e}")
         filtered_people = []
 
     person_options = ["Select..."] + sorted(filtered_people)
-    
+
+    # Ensure selected_person is a valid option, or reset it
     if st.session_state['selected_person'] not in person_options:
         st.session_state['selected_person'] = "Select..."
 
     current_person_index = person_options.index(st.session_state['selected_person'])
 
-    with st.form("transaction_form", clear_on_submit=True):
+    with st.form("transaction_form", clear_on_submit=False): # Set clear_on_submit to False to manage state manually
         col1, col2 = st.columns(2)
         with col1:
-            amount = st.number_input("Amount (Rs.)", min_value=0.0, format="%.2f")
-            date = st.date_input("Date", value=datetime.now().date())
+            amount = st.number_input("Amount (Rs.)", min_value=0.0, format="%.2f",
+                                     value=st.session_state.get('add_amount', 0.0), key='add_amount')
+            date = st.date_input("Date", value=st.session_state.get('add_date', datetime.now().date()), key='add_date')
 
-            reference_number = st.text_input("Reference Number (Receipt/Cheque No.)")
-            
-            cheque_status = ""
+            reference_number = st.text_input("Reference Number (Receipt/Cheque No.)",
+                                             value=st.session_state.get('add_reference_number', ''), key='add_reference_number')
+
+            cheque_status_val = ""
             if st.session_state['payment_method'] == "cheque":
-                cheque_status = st.selectbox(
+                cheque_status_val = st.selectbox(
                     "Cheque Status",
-                    ["received/given", "processing", "bounced", "processing done"]
+                    ["received/given", "processing", "bounced", "processing done"],
+                    index=["received/given", "processing", "bounced", "processing done"].index(
+                        st.session_state.get('add_cheque_status', 'received/given')
+                    ),
+                    key='add_cheque_status'
                 )
 
         with col2:
@@ -852,32 +914,37 @@ with tab1:
                 "Select Person", person_options, index=current_person_index, key='selected_person_dropdown'
             )
             if st.session_state['selected_person'] == "Select...":
-                st.session_state['selected_person'] = None
+                selected_person_final = None
+            else:
+                selected_person_final = st.session_state['selected_person']
 
-            status = st.selectbox("Transaction Status", ["completed", "pending"])
-            description = st.text_input("Description")
+
+            status = st.selectbox("Transaction Status", ["completed", "pending"],
+                                  index=["completed", "pending"].index(st.session_state.get('add_status', 'completed')),
+                                  key='add_status')
+            description = st.text_input("Description", value=st.session_state.get('add_description', ''), key='add_description')
 
         submitted = st.form_submit_button("Add Transaction")
         if submitted:
-            if not st.session_state['selected_person']:
+            if not selected_person_final:
                 st.warning("Please select a valid person.")
             elif amount <= 0:
                 st.warning("Amount must be greater than 0.")
-            elif not reference_number:
+            elif not reference_number.strip(): # Ensure reference number is not just whitespace
                 st.warning("Reference Number is required.")
             else:
                 try:
                     new_row = {
                         "date": date.strftime("%Y-%m-%d"),
-                        "person": st.session_state['selected_person'],
+                        "person": selected_person_final,
                         "amount": amount,
                         "type": 'paid_to_me' if st.session_state['selected_transaction_type'] == "Paid to Me" else 'i_paid',
-                        "status": status,
+                        "status": status, # This 'status' column is redundant with 'transaction_status' but kept for compatibility
                         "description": description,
                         "payment_method": st.session_state['payment_method'],
-                        "reference_number": reference_number,
-                        "cheque_status": cheque_status if st.session_state['payment_method'] == "cheque" else "",
-                        "transaction_status": status
+                        "reference_number": reference_number.strip(), # Strip whitespace
+                        "cheque_status": cheque_status_val if st.session_state['payment_method'] == "cheque" else None,
+                        "transaction_status": status # Use the selected status for transaction_status
                     }
                     pd.DataFrame([new_row]).to_csv(CSV_FILE, mode='a', header=False, index=False)
                     # Read the updated CSV and prepare for HTML summary
@@ -885,50 +952,56 @@ with tab1:
                     generate_html_summary(updated_df)
                     git_push()
                     st.success("Transaction added successfully.")
-                    reset_form_session_state_for_add_transaction()
-                    st.rerun()
+                    reset_form_session_state_for_add_transaction() # Reset form after successful submission
+                    st.rerun() # Rerun to clear form inputs visually
                 except Exception as e:
                     st.error(f"Error saving transaction: {e}")
 
 # ------------------ Tab 2: View Transactions ------------------
 with tab2:
     st.subheader("Transaction History")
-    
+
     try:
         df = pd.read_csv(CSV_FILE)
-        
+
         # Check if DataFrame is empty
         if df.empty:
             st.info("No transactions recorded yet.")
-            st.stop()
+            # st.stop() # Removed st.stop() to allow other parts of the app to render
             
         # Prepare DataFrame for display, which includes validation and formatting
-        filtered_df = prepare_dataframe_for_display(df)
-        
+        # Use a temporary DataFrame for filtering to avoid modifying the original 'df'
+        temp_filtered_df = df.copy()
+
         # Filters (apply filters on the original columns, then display with _display columns)
         col1, col2, col3 = st.columns(3)
         with col1:
-            view_filter = st.radio("Filter by Type", ["All", "Received", "Paid"], horizontal=True)
+            view_filter = st.radio("Filter by Type", ["All", "Received", "Paid"], horizontal=True, key='view_filter_radio')
         with col2:
-            method_filter = st.selectbox("Payment Method", ["All", "Cash", "Cheque"])
+            method_filter = st.selectbox("Payment Method", ["All", "Cash", "Cheque"], key='method_filter_select')
         with col3:
-            status_filter = st.selectbox("Status", ["All", "Completed", "Pending", "Received/Given", "Processing", "Bounced", "Processing Done"])
+            status_filter = st.selectbox("Status", ["All", "Completed", "Pending", "Received/Given", "Processing", "Bounced", "Processing Done"], key='status_filter_select')
 
         # Apply filters to the original columns for accurate filtering logic
-        temp_filtered_df = df.copy() # Use original df for filtering
         if view_filter != "All":
             temp_filtered_df = temp_filtered_df[temp_filtered_df['type'].map({'paid_to_me': 'Received', 'i_paid': 'Paid'}) == view_filter]
         if method_filter != "All":
-            temp_filtered_df = temp_filtered_df[temp_filtered_df['payment_method'].str.lower() == method_filter.lower()]
+            temp_filtered_df = temp_filtered_df[temp_filtered_df['payment_method'].astype(str).str.lower() == method_filter.lower()]
         if status_filter != "All":
-            if status_filter.lower() in ["completed", "pending"]:
-                temp_filtered_df = temp_filtered_df[temp_filtered_df['transaction_status'].str.lower() == status_filter.lower()]
-            else:
-                temp_filtered_df = temp_filtered_df[temp_filtered_df['cheque_status'].str.lower() == status_filter.lower()]
+            if status_filter.lower() in valid_transaction_statuses_lower: # Check if it's a general transaction status
+                temp_filtered_df = temp_filtered_df[temp_filtered_df['transaction_status'].astype(str).str.lower() == status_filter.lower()]
+            elif status_filter.lower() in valid_cheque_statuses_lower: # Check if it's a cheque specific status
+                temp_filtered_df = temp_filtered_df[temp_filtered_df['cheque_status'].astype(str).str.lower() == status_filter.lower()]
+
 
         # Now apply the display preparation to the filtered data
         filtered_df_for_display = prepare_dataframe_for_display(temp_filtered_df)
-        filtered_df_for_display['original_index'] = temp_filtered_df.index # Keep original index for editing
+        # Add original index for editing purposes, ensuring it's available even if the original df was empty
+        if not filtered_df_for_display.empty:
+            filtered_df_for_display['original_index'] = temp_filtered_df.index
+        else:
+            st.info("No transactions match the current filters.")
+
 
         # Display DataFrame with clearer column names using the _display columns
         display_columns = {
@@ -943,134 +1016,133 @@ with tab2:
             'transaction_status_display': 'Status', # Using validated display column
             'description': 'Description'
         }
-        
-        st.dataframe(
-            filtered_df_for_display[list(display_columns.keys())].rename(columns=display_columns),
-            use_container_width=True,
-            hide_index=True
-        )
 
-        # Edit Section
-        if not filtered_df_for_display.empty: # Use filtered_df_for_display for options
+        if not filtered_df_for_display.empty:
+            st.dataframe(
+                filtered_df_for_display[list(display_columns.keys())].rename(columns=display_columns),
+                use_container_width=True,
+                hide_index=True
+            )
+
+            # Edit Section
             st.markdown("---")
             st.subheader("Edit Transaction")
-            
-            edit_options = [f"ID: {row['original_index']} - {row['formatted_date']} - {row['person']} - {row['amount_display']}" 
+
+            edit_options = [f"ID: {row['original_index']} - {row['formatted_date']} - {row['person']} - {row['amount_display']}"
                            for idx, row in filtered_df_for_display.iterrows()]
-            
+
             selected_edit_option = st.selectbox(
-                "Select transaction to edit:", 
+                "Select transaction to edit:",
                 ["Select a transaction"] + edit_options,
                 key='select_edit_transaction'
             )
-            
+
             if selected_edit_option != "Select a transaction":
                 selected_original_index = int(selected_edit_option.split(' - ')[0].replace('ID: ', ''))
-                
-                if st.button("Edit Selected Transaction", key='edit_button'):
+
+                # Set editing_row_idx and load data for editing form
+                if st.session_state['editing_row_idx'] != selected_original_index:
                     st.session_state['editing_row_idx'] = selected_original_index
                     st.session_state['temp_edit_data'] = df.loc[st.session_state['editing_row_idx']].to_dict()
-                    st.rerun()
+                    st.rerun() # Rerun to populate the form with data
 
         # Edit Form (appears when editing_row_idx is set)
         if st.session_state['editing_row_idx'] is not None and st.session_state.get('temp_edit_data'):
             st.markdown("---")
-            st.subheader("Edit Transaction Details")
+            st.subheader(f"Editing Transaction ID: {st.session_state['editing_row_idx']}")
             edit_data = st.session_state['temp_edit_data']
-            
+
             with st.form("edit_transaction_form"):
                 col1_edit, col2_edit = st.columns(2)
                 with col1_edit:
                     edited_amount = st.number_input("Amount (Rs.)", value=float(edit_data.get('amount', 0.0)), format="%.2f", key='edit_amount')
-                    
+
                     try:
-                        default_date_value = datetime.strptime(edit_data.get('date', ''), "%Y-%m-%d").date()
-                    except:
+                        default_date_value = datetime.strptime(str(edit_data.get('date', '')), "%Y-%m-%d").date()
+                    except (ValueError, TypeError):
                         default_date_value = datetime.now().date()
                     edited_date = st.date_input("Date", value=default_date_value, key='edit_date')
 
                     edited_payment_method = st.radio(
-                        "Payment Method", 
-                        ["cash", "cheque"], 
-                        horizontal=True, 
-                        index=["cash", "cheque"].index(edit_data.get('payment_method', 'cash')),
+                        "Payment Method",
+                        ["cash", "cheque"],
+                        horizontal=True,
+                        index=["cash", "cheque"].index(str(edit_data.get('payment_method', 'cash')).lower()),
                         key='edit_payment_method'
                     )
-                    
+
+                    edited_cheque_status = ""
                     if edited_payment_method == "cheque":
-                        cheque_status = edit_data.get('cheque_status', 'processing')
-                        if pd.isna(cheque_status) or str(cheque_status).lower() not in valid_cheque_statuses_lower:
-                            cheque_status = 'processing' # Default to a valid status if current is invalid
+                        cheque_status_val = str(edit_data.get('cheque_status', 'processing')).lower()
+                        if cheque_status_val not in valid_cheque_statuses_lower:
+                            cheque_status_val = 'processing' # Default to a valid status if current is invalid
                         edited_cheque_status = st.selectbox(
                             "Cheque Status",
-                            ["received/given", "processing", "bounced", "processing done"],
-                            index=["received/given", "processing", "bounced", "processing done"].index(
-                                str(cheque_status)  # Ensure string conversion
-                            ),
+                            valid_cheque_statuses_lower,
+                            index=valid_cheque_statuses_lower.index(cheque_status_val),
                             key='edit_cheque_status'
                         )
                     else:
-                        edited_cheque_status = ""
+                        edited_cheque_status = None # Ensure it's None for cash payments
 
                     edited_reference_number = st.text_input(
-                        "Reference Number", 
-                        value=str(edit_data.get('reference_number', '')),  # Ensure string conversion
+                        "Reference Number",
+                        value=str(edit_data.get('reference_number', '')),
                         key='edit_reference_number'
                     )
 
                 with col2_edit:
                     try:
                         people_df = pd.read_csv(PEOPLE_FILE)
-                        people_list = people_df['name'].dropna().tolist()  # Remove any NaN values
-                        current_person = edit_data['person']
-                        
+                        people_list = people_df['name'].dropna().astype(str).tolist() # Ensure strings
+                        current_person = str(edit_data.get('person', ''))
+
                         # Handle case where person might not be in current people list
-                        if pd.isna(current_person) or current_person not in people_list:
-                            if pd.notna(current_person):
-                                people_list = [current_person] + people_list
+                        if current_person not in people_list and current_person != '':
+                            people_list = [current_person] + people_list
                             default_index = 0
+                        elif current_person == '': # If person is empty, default to first option or 'Select...'
+                             default_index = 0 if len(people_list) > 0 else 0
                         else:
                             default_index = people_list.index(current_person)
-                        
+
                         edited_person = st.selectbox(
-                            "Select Person", 
-                            people_list, 
-                            index=default_index, 
+                            "Select Person",
+                            people_list,
+                            index=default_index,
                             key='edit_person'
                         )
                     except Exception as e:
-                        st.error(f"Error loading people data: {e}")
-                        edited_person = edit_data['person']
+                        st.error(f"Error loading people data for edit: {e}")
+                        edited_person = str(edit_data.get('person', '')) # Fallback to existing value
 
-                    transaction_status = edit_data.get('transaction_status', 'completed')
-                    if pd.isna(transaction_status) or str(transaction_status).lower() not in valid_transaction_statuses_lower:
-                        transaction_status = 'completed' # Default to a valid status if current is invalid
+                    transaction_status_val = str(edit_data.get('transaction_status', 'completed')).lower()
+                    if transaction_status_val not in valid_transaction_statuses_lower:
+                        transaction_status_val = 'completed' # Default to a valid status if current is invalid
                     edited_transaction_status = st.selectbox(
-                        "Transaction Status", 
-                        ["completed", "pending"], 
-                        index=["completed", "pending"].index(
-                            str(transaction_status)
-                        ), 
+                        "Transaction Status",
+                        valid_transaction_statuses_lower,
+                        index=valid_transaction_statuses_lower.index(transaction_status_val),
                         key='edit_transaction_status'
                     )
-                    
+
                     edited_description = st.text_input(
-                        "Description", 
-                        value=str(edit_data.get('description', '')),  # Ensure string conversion
+                        "Description",
+                        value=str(edit_data.get('description', '')),
                         key='edit_description'
                     )
 
                 # Form submit and cancel buttons
-                col1, col2 = st.columns(2)
-                with col1:
+                col1_btns, col2_btns = st.columns(2)
+                with col1_btns:
                     submit_button = st.form_submit_button("💾 Save Changes")
-                with col2:
+                with col2_btns:
                     cancel_button = st.form_submit_button("❌ Cancel")
 
                 if submit_button:
                     if edited_amount <= 0:
                         st.warning("Amount must be greater than 0.")
-                    elif not edited_reference_number:
+                    elif not edited_reference_number.strip():
                         st.warning("Reference Number is required.")
                     else:
                         try:
@@ -1079,11 +1151,11 @@ with tab2:
                                 "person": edited_person,
                                 "amount": edited_amount,
                                 "type": edit_data['type'], # Keep original type
-                                "status": edited_transaction_status, # Update 'status' column
+                                "status": edited_transaction_status, # Update 'status' column (redundant but kept)
                                 "description": edited_description,
                                 "payment_method": edited_payment_method,
-                                "reference_number": edited_reference_number,
-                                "cheque_status": edited_cheque_status,
+                                "reference_number": edited_reference_number.strip(),
+                                "cheque_status": edited_cheque_status, # Will be None for cash
                                 "transaction_status": edited_transaction_status # Update 'transaction_status' column
                             }
                             df.to_csv(CSV_FILE, index=False)
@@ -1103,7 +1175,7 @@ with tab2:
 
     except Exception as e:
             st.error(f"Error loading transaction history: {str(e)}")
-            st.stop()
+            # st.stop() # Removed st.stop() to allow other parts of the app to render
 
 # ------------------ Tab 3: Manage People ------------------
 with tab3:
@@ -1111,23 +1183,25 @@ with tab3:
     with st.expander("Add New Person"):
         with st.form("person_form", clear_on_submit=True):
             c1, c2 = st.columns(2)
-            name = c1.text_input("Name")
+            name = c1.text_input("Name").strip() # Strip whitespace from name
             category = c2.selectbox("Category", ["investor", "client"])
             if st.form_submit_button("Add Person"):
-                if not name.strip():
+                if not name: # Check if name is empty after stripping
                     st.warning("Name is required.")
                 else:
                     try:
                         if not os.path.exists(PEOPLE_FILE):
                             pd.DataFrame(columns=["name", "category"]).to_csv(PEOPLE_FILE, index=False)
-                        
+
                         df = pd.read_csv(PEOPLE_FILE)
-                        if name.strip() in df['name'].values:
-                            st.warning("Person already exists.")
+                        # Convert 'name' column to string for consistent comparison
+                        df['name'] = df['name'].astype(str)
+                        if name.lower() in df['name'].str.lower().values: # Case-insensitive check
+                            st.warning(f"Person '{name}' already exists.")
                         else:
-                            pd.DataFrame([[name.strip(), category]], columns=["name", "category"])\
+                            pd.DataFrame([[name, category]], columns=["name", "category"])\
                                 .to_csv(PEOPLE_FILE, mode='a', header=False, index=False)
-                            st.success(f"{name.strip()} added!")
+                            st.success(f"{name} added!")
                             st.rerun()
                     except Exception as e:
                         st.error(f"Error saving person: {e}")
@@ -1137,19 +1211,26 @@ with tab3:
             ppl = pd.read_csv(PEOPLE_FILE)
             if not ppl.empty:
                 st.dataframe(ppl, use_container_width=True, hide_index=True)
-                to_del = st.selectbox("Delete Person", ppl['name'])
-                if st.button("Delete"):
-                    try:
-                        tx = pd.read_csv(CSV_FILE)
-                        if to_del in tx['person'].values:
-                            st.error("Cannot delete person with transactions.")
-                        else:
-                            ppl = ppl[ppl['name'] != to_del]
-                            ppl.to_csv(PEOPLE_FILE, index=False)
-                            st.success("Deleted.")
-                            st.rerun()
-                    except Exception as e:
-                        st.error(f"Error deleting person: {e}")
+                
+                # Ensure selectbox defaults gracefully if no people are present
+                if not ppl['name'].empty:
+                    to_del = st.selectbox("Delete Person", ppl['name'].astype(str).tolist(), key='delete_person_select')
+                    if st.button("Delete", key='delete_person_button'):
+                        try:
+                            tx = pd.read_csv(CSV_FILE)
+                            # Ensure 'person' column in transactions is string for comparison
+                            tx['person'] = tx['person'].astype(str)
+                            if to_del in tx['person'].values:
+                                st.error(f"Cannot delete '{to_del}'. There are transactions associated with this person.")
+                            else:
+                                ppl = ppl[ppl['name'].astype(str) != to_del]
+                                ppl.to_csv(PEOPLE_FILE, index=False)
+                                st.success(f"'{to_del}' deleted.")
+                                st.rerun()
+                        except Exception as e:
+                            st.error(f"Error deleting person: {e}")
+                else:
+                    st.info("No people records to delete.")
             else:
                 st.info("No people records yet.")
         else:
@@ -1163,7 +1244,11 @@ try:
     if os.path.exists(CSV_FILE):
         df_bal = pd.read_csv(CSV_FILE)
         if not df_bal.empty:
+            # Ensure columns are treated as strings and amounts as numeric for calculations
             df_bal['amount'] = pd.to_numeric(df_bal['amount'], errors='coerce').fillna(0.0)
+            df_bal['type'] = df_bal['type'].astype(str).str.lower()
+            df_bal['payment_method'] = df_bal['payment_method'].astype(str).str.lower()
+
             rec = df_bal[df_bal['type'] == 'paid_to_me']['amount'].sum()
             paid = df_bal[df_bal['type'] == 'i_paid']['amount'].sum()
             cash_rec = df_bal[(df_bal['type'] == 'paid_to_me') & (df_bal['payment_method'] == 'cash')]['amount'].sum()

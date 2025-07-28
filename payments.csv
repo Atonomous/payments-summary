@@ -1,3 +1,3 @@
 date,person,amount,type,status,description,payment_method,cheque_status,transaction_status,reference_number,amount_display,type_display,original_index,formatted_date
-28/07/2025,Zohaib,25000,i_paid,completed,Paid first time,cash,,completed,785000,,,,
-2025-07-28,Rizwan,2500.0,paid_to_me,completed,Paid first time,cash,45200055855,,completed
+,,,,,,,,,,,,,
+,,,,,,,,,,,,,
