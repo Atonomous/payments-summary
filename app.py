@@ -102,6 +102,23 @@ def clean_payments_data(df):
         else: # For cash payments, ensure cheque_status is empty
             df.loc[index, 'cheque_status'] = ''
 
+    # --- NEW FIX: Specific handling for 'reference_number' to remove .0 and scientific notation ---
+    for index, value in df['reference_number'].items():
+        if value: # Only process if not empty
+            try:
+                # Attempt to convert to float
+                float_val = float(value)
+                # Check if it's an integer (e.g., 123.0)
+                if float_val == int(float_val):
+                    df.loc[index, 'reference_number'] = str(int(float_val))
+                else:
+                    # Keep as float string if it has decimal component
+                    df.loc[index, 'reference_number'] = str(float_val)
+            except ValueError:
+                # Not a number, keep as is (it's already stripped and 'nan' replaced with empty string)
+                pass
+    # --- END NEW FIX ---
+
     # Remove rows where 'date', 'person', 'amount' are all empty/zero after cleaning
     # This addresses the blank rows with 0.0 amount that appear in your CSV
     df = df[~((df['date'] == '') & (df['person'] == '') & (df['amount'] == 0.0))]
@@ -126,6 +143,7 @@ def init_files():
             st.toast(f"Created new {CSV_FILE}")
         else:
             # --- CRITICAL FIX: Force reference_number to be read as string ---
+            # This is key to preventing Pandas from inferring it as a number
             df = pd.read_csv(CSV_FILE, dtype={'reference_number': str})
             # --- END CRITICAL FIX ---
 
@@ -1236,7 +1254,7 @@ with tab2:
 
                     edited_reference_number = st.text_input(
                         "Reference Number",
-                        value=str(edit_data.get('reference_number', '')),
+                        value=str(edit_data.get('reference_number', '')), # Now this should correctly show the string
                         key='edit_reference_number'
                     )
 
