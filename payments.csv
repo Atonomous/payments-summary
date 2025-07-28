@@ -1,16 +1,2 @@
 date,person,amount,type,status,description,payment_method,cheque_status,transaction_status,reference_number,amount_display,type_display,original_index,formatted_date
-,,,,,,,,,,,,,
-,,,,,,,,,,,,,
-,,,,,,,,,,,,,
-,,,,,,,,,,,,,
-,,,,,,,,,,,,,
-,,,,,,,,,,,,,
-,,,,,,,,,,,,,
-,,,,,,,,,,,,,
-,,,,,,,,,,,,,
-,,,,,,,,,,,,,
-,,,,,,,,,,,,,
-,,,,,,,,,,,,,
-,,,,,,,,,,,,,
-,,,,,,,,,,,,,
-,,,,,,,,,,,,,
+2025-07-29,Zohaib,25000.0,i_paid,completed,FirstAgain9^4,cash,205783541,,completed

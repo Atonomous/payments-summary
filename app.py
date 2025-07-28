@@ -72,22 +72,23 @@ def clean_payments_data(df):
     cash_payments_mask = df['payment_method'].str.lower() == 'cash'
     df.loc[cash_payments_mask, 'cheque_status'] = '' # Set to empty string for cash payments
 
-    # Rule 2: Normalize transaction_status and cheque_status, and correct misplacements
+    # Iterate through rows to apply more complex cleaning rules
     for index, row in df.iterrows():
-        ref_num_lower = row['reference_number'].lower()
-        trans_status_current_lower = row['transaction_status'].lower()
-        cheque_status_current_lower = row['cheque_status'].lower()
-        payment_method_lower = row['payment_method'].lower()
+        ref_num_lower = str(row['reference_number']).lower()
+        trans_status_current_lower = str(row['transaction_status']).lower()
+        cheque_status_current_lower = str(row['cheque_status']).lower()
+        payment_method_lower = str(row['payment_method']).lower()
 
         # Prioritize moving valid statuses from reference_number if applicable
+        # This ensures that if a status was mistakenly put in reference_number, it gets moved.
         if ref_num_lower in valid_transaction_statuses_lower:
             if trans_status_current_lower not in valid_transaction_statuses_lower:
                 df.loc[index, 'transaction_status'] = ref_num_lower
-            df.loc[index, 'reference_number'] = ''
+            df.loc[index, 'reference_number'] = '' # Clear reference_number after moving
         elif ref_num_lower in valid_cheque_statuses_lower and payment_method_lower == 'cheque':
             if cheque_status_current_lower not in valid_cheque_statuses_lower:
                 df.loc[index, 'cheque_status'] = ref_num_lower
-            df.loc[index, 'reference_number'] = ''
+            df.loc[index, 'reference_number'] = '' # Clear reference_number after moving
 
         # Rule 3: Ensure transaction_status is valid, default to 'completed' if invalid/empty
         if df.loc[index, 'transaction_status'].lower() not in valid_transaction_statuses_lower:
@@ -99,6 +100,10 @@ def clean_payments_data(df):
                 df.loc[index, 'cheque_status'] = 'processing' # Default to 'processing' for invalid cheque status
         else: # For cash payments, ensure cheque_status is empty
             df.loc[index, 'cheque_status'] = ''
+
+    # Remove rows where 'date', 'person', 'amount' are all empty/zero after cleaning
+    # This addresses the blank rows with 0.0 amount that appear in your CSV
+    df = df[~((df['date'] == '') & (df['person'] == '') & (df['amount'] == 0.0))]
 
     return df
 
@@ -165,18 +170,39 @@ init_files()
 def git_push():
     """
     Performs a Git add, commit, and push operation.
+    Includes more verbose logging for debugging.
     """
     try:
+        st.write("Attempting Git push...") # Debugging print
         repo = Repo(REPO_PATH)
-        repo.git.add(update=True) # Add all modified files
-        repo.index.commit("Automated update: payment records")
+        
+        # Check for uncommitted changes before adding
+        if repo.is_dirty(untracked_files=True):
+            st.write("Uncommitted changes detected. Adding files...")
+            repo.git.add(update=True) # Add all modified files
+            repo.git.add(all=True) # Also add untracked files (like new HTML if created)
+            st.write("Files added to staging.")
+        else:
+            st.write("No changes detected to stage.")
+
+        # Only commit if there are changes in the index
+        if repo.index.diff("HEAD"):
+            st.write("Changes in index. Committing...")
+            repo.index.commit("Automated update: payment records")
+            st.write("Commit successful.")
+        else:
+            st.write("No changes to commit.")
+            return True # No changes, so nothing to push, consider it successful
+
         origin = repo.remote(name='origin')
+        st.write(f"Pushing to remote: {origin.url}") # Debugging print
         origin.push()
         st.success("GitHub updated successfully!")
         return True
     except Exception as e:
         st.error(f"Error updating GitHub: {e}")
         st.warning("Please ensure you have configured Git and have push access to the repository.")
+        st.warning("Try running 'git push' manually in your terminal to see specific errors.")
         return False
 
 def prepare_dataframe_for_display(df):
@@ -702,29 +728,6 @@ def generate_html_summary(df):
             $('#start-date').val(oneMonthAgo.toISOString().split('T')[0]);
             $('#end-date').val(today.toISOString().split('T')[0]);
             applyFilters(); // Apply filters after resetting
-        }}
-
-        // Initialize date pickers with reasonable defaults
-        $(document).ready(function() {{
-            const today = new Date();
-            const oneMonthAgo = new Date();
-            oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
-
-            $('#start-date').val(oneMonthAgo.toISOString().split('T')[0]);
-            $('#end-date').val(today.toISOString().split('T')[0]);
-
-            // Apply filters when dropdowns change
-            $('.filter-group select').change(function() {{
-                applyFilters();
-            }});
-
-            // Apply filters when date inputs change
-            $('.date-filter').change(function() {{
-                applyFilters();
-            }});
-
-            // Initial filter application on load
-            applyFilters();
         }});
     </script>
 </head>
@@ -1040,7 +1043,14 @@ with tab1:
             elif amount <= 0:
                 st.warning("Amount must be greater than 0.")
             elif not reference_number.strip(): # Ensure reference number is not just whitespace
-                st.warning("Reference Number is required.")
+                # --- IMPORTANT: Enforce reference number for cheque transactions ---
+                if st.session_state['payment_method'] == "cheque":
+                    st.warning("Reference Number is required for cheque transactions.")
+                    st.stop() # Stop execution to prevent adding incomplete data
+                else:
+                    st.warning("Reference Number is required.") # For cash too
+                    st.stop()
+                # --- END IMPORTANT ---
             else:
                 try:
                     new_row = {
@@ -1268,7 +1278,14 @@ with tab2:
                     if edited_amount <= 0:
                         st.warning("Amount must be greater than 0.")
                     elif not edited_reference_number.strip():
-                        st.warning("Reference Number is required.")
+                        # --- IMPORTANT: Enforce reference number for cheque transactions during edit ---
+                        if edited_payment_method == "cheque":
+                            st.warning("Reference Number is required for cheque transactions.")
+                            st.stop()
+                        else:
+                            st.warning("Reference Number is required.") # For cash too
+                            st.stop()
+                        # --- END IMPORTANT ---
                     else:
                         try:
                             df.loc[st.session_state['editing_row_idx']] = {
