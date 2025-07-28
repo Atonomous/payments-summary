@@ -21,8 +21,8 @@ def init_state():
         'editing_row_idx': None,
         'selected_person': "Select...",
         'reset_add_form': False,
-        'add_amount': 0.0,
-        'add_date': datetime.now().date(),
+        'add_amount': None, # Initialize to None to avoid conflict with widget's implicit 0.0 default
+        'add_date': None, # Initialize to None to avoid conflict with widget's implicit today's date default
         'add_reference_number': '',
         'add_cheque_status': 'received/given',
         'add_status': 'completed',
@@ -46,10 +46,73 @@ SUMMARY_URL = "https://atonomous.github.io/payments-summary/"
 valid_cheque_statuses_lower = ["received/given", "processing", "bounced", "processing done"]
 valid_transaction_statuses_lower = ["completed", "pending"]
 
+def clean_payments_data(df):
+    """
+    Cleans and normalizes the payments DataFrame to ensure data consistency.
+    This function modifies the DataFrame in memory.
+    It handles common data entry errors and type mismatches.
+    """
+    if df.empty:
+        return df
+
+    # Ensure all relevant columns exist and are strings, replacing NaN/None
+    cols_to_check = ["payment_method", "cheque_status", "transaction_status", "reference_number", "date", "amount", "person", "type", "status", "description"]
+    for col in cols_to_check:
+        if col not in df.columns:
+            df[col] = '' # Add missing column with empty string default
+        df[col] = df[col].astype(str).replace('nan', '').replace('None', '').str.strip()
+
+    # Convert amount to numeric, coercing errors to NaN, then fill with 0.0
+    df['amount'] = pd.to_numeric(df['amount'], errors='coerce').fillna(0.0)
+
+    # Convert date to YYYY-MM-DD format, coercing errors to NaT
+    # Use dayfirst=True to handle DD/MM/YYYY formats
+    df['date'] = pd.to_datetime(df['date'], errors='coerce', dayfirst=True).dt.strftime('%Y-%m-%d').fillna('')
+
+    # Rule 1: If payment_method is 'cash', cheque_status must be empty
+    # Ensure payment_method is lowercased for comparison
+    cash_payments_mask = df['payment_method'].str.lower() == 'cash'
+    df.loc[cash_payments_mask, 'cheque_status'] = '' # Set to empty string for cash payments
+
+    # Rule 2: Normalize transaction_status and cheque_status, and correct misplacements
+    for index, row in df.iterrows():
+        ref_num_lower = row['reference_number'].lower()
+        trans_status_current_lower = row['transaction_status'].lower()
+        cheque_status_current_lower = row['cheque_status'].lower()
+        payment_method_lower = row['payment_method'].lower()
+
+        # Case A: reference_number contains a transaction status
+        if ref_num_lower in valid_transaction_statuses_lower:
+            # If current transaction_status is invalid/empty, move it
+            if trans_status_current_lower not in valid_transaction_statuses_lower:
+                df.loc[index, 'transaction_status'] = ref_num_lower
+            df.loc[index, 'reference_number'] = '' # Clear reference_number after moving
+
+        # Case B: reference_number contains a cheque status AND it's a cheque payment
+        elif ref_num_lower in valid_cheque_statuses_lower and payment_method_lower == 'cheque':
+            # If current cheque_status is invalid/empty, move it
+            if cheque_status_current_lower not in valid_cheque_statuses_lower:
+                df.loc[index, 'cheque_status'] = ref_num_lower
+            df.loc[index, 'reference_number'] = '' # Clear reference_number after moving
+
+        # Rule 3: Ensure transaction_status is valid, default to 'completed' if invalid/empty
+        if df.loc[index, 'transaction_status'].lower() not in valid_transaction_statuses_lower:
+            df.loc[index, 'transaction_status'] = 'completed' # Default to completed
+
+        # Rule 4: Ensure cheque_status is valid for cheque payments, default to empty for others
+        if payment_method_lower == 'cheque' and df.loc[index, 'cheque_status'].lower() not in valid_cheque_statuses_lower:
+            df.loc[index, 'cheque_status'] = '' # Default to empty for invalid cheque status on cheque payments
+        elif payment_method_lower == 'cash':
+            df.loc[index, 'cheque_status'] = '' # Redundant but ensures consistency for cash
+
+    return df
+
+
 def init_files():
     """
     Initializes payments.csv and people.csv if they don't exist.
     Also handles migration of old column names and ensures 'category' in people.csv.
+    Crucially, it now cleans the payments data upon load.
     """
     try:
         # Initialize payments.csv if it doesn't exist
@@ -61,20 +124,18 @@ def init_files():
             ]).to_csv(CSV_FILE, index=False)
             st.toast(f"Created new {CSV_FILE}")
         else:
-            # Handle migration from old format to new format if needed
             df = pd.read_csv(CSV_FILE)
-            # Check for old columns and migrate to 'reference_number'
+            # Handle migration from old format to new format if needed
             if 'receipt_number' in df.columns or 'cheque_number' in df.columns:
                 df['reference_number'] = df.apply(
                     lambda row: row['receipt_number'] if row['payment_method'] == 'cash'
                     else (row['cheque_number'] if row['payment_method'] == 'cheque' else ''),
                     axis=1
-                ).fillna('') # Fill NaN with empty string after migration
+                ).fillna('')
                 df = df.drop(columns=['receipt_number', 'cheque_number'], errors='ignore')
-                df.to_csv(CSV_FILE, index=False)
                 st.toast("Migrated old reference number columns.")
             
-            # Ensure all expected columns exist in payments.csv
+            # Ensure all expected columns exist before cleaning
             expected_payment_cols = [
                 "date", "person", "amount", "type", "status",
                 "description", "payment_method", "reference_number",
@@ -82,8 +143,12 @@ def init_files():
             ]
             for col in expected_payment_cols:
                 if col not in df.columns:
-                    df[col] = '' # Add missing column with empty string default
-            df.to_csv(CSV_FILE, index=False) # Save back with any new columns
+                    df[col] = ''
+            
+            # --- CRITICAL: Clean data on load and save back ---
+            df = clean_payments_data(df)
+            df.to_csv(CSV_FILE, index=False) # Save the cleaned data back to CSV
+            st.toast("Payments data cleaned and saved.")
 
         # Initialize people.csv if it doesn't exist
         if not os.path.exists(PEOPLE_FILE):
@@ -177,6 +242,12 @@ def prepare_dataframe_for_display(df):
 
     # Format 'type' for display ('paid_to_me' -> 'Received', 'i_paid' -> 'Paid')
     df_display['type_display'] = df_display['type'].map({'paid_to_me': 'Received', 'i_paid': 'Paid'}).fillna('')
+
+    # --- DEBUG PRINT (to console, not sidebar) ---
+    print("\n--- DEBUG: prepare_dataframe_for_display Output (Head) ---")
+    print(df_display[['formatted_date', 'person', 'amount_display', 'type_display', 'payment_method', 'cheque_status_display', 'reference_number_display', 'transaction_status_display']].head().to_markdown(index=False, numalign="left", stralign="left"))
+    print("----------------------------------------------------------\n")
+    # --- END DEBUG PRINT ---
 
     return df_display
 
@@ -870,8 +941,8 @@ def reset_form_session_state_for_add_transaction():
     st.session_state['selected_person'] = "Select..."
     st.session_state['editing_row_idx'] = None # Ensure edit mode is off
     # Clear form inputs by setting their keys to default values
-    st.session_state['add_amount'] = 0.0
-    st.session_state['add_date'] = datetime.now().date()
+    st.session_state['add_amount'] = None # Reset to None
+    st.session_state['add_date'] = None # Reset to None
     st.session_state['add_reference_number'] = ''
     st.session_state['add_cheque_status'] = 'received/given'
     st.session_state['add_status'] = 'completed'
@@ -916,24 +987,29 @@ with tab1:
     with st.form("transaction_form", clear_on_submit=False): # Set clear_on_submit to False to manage state manually
         col1, col2 = st.columns(2)
         with col1:
-            # CORRECTED: Removed explicit default value from 'value' parameter
-            amount = st.number_input("Amount (Rs.)", min_value=0.0, format="%.2f",
-                                     value=st.session_state['add_amount'], key='add_amount')
-            # CORRECTED: Removed explicit default value from 'value' parameter
-            date = st.date_input("Date", value=st.session_state['add_date'], key='add_date')
+            # Conditionally pass value based on session state
+            amount_value = st.session_state['add_amount']
+            if amount_value is None:
+                amount = st.number_input("Amount (Rs.)", min_value=0.0, format="%.2f", key='add_amount')
+            else:
+                amount = st.number_input("Amount (Rs.)", min_value=0.0, format="%.2f", value=float(amount_value), key='add_amount')
+            
+            # Conditionally pass value based on session state
+            date_value = st.session_state['add_date']
+            if date_value is None:
+                date = st.date_input("Date", key='add_date')
+            else:
+                date = st.date_input("Date", value=date_value, key='add_date')
 
-            # CORRECTED: Removed explicit default value from 'value' parameter
             reference_number = st.text_input("Reference Number (Receipt/Cheque No.)",
                                              value=st.session_state['add_reference_number'], key='add_reference_number')
 
             cheque_status_val = ""
             if st.session_state['payment_method'] == "cheque":
                 default_cheque_status_idx = 0
-                # Ensure the value in session state is valid before trying to find its index
                 if st.session_state['add_cheque_status'] in valid_cheque_statuses_lower:
                     default_cheque_status_idx = valid_cheque_statuses_lower.index(st.session_state['add_cheque_status'])
                 
-                # CORRECTED: Removed explicit default value from 'index' parameter
                 cheque_status_val = st.selectbox(
                     "Cheque Status",
                     valid_cheque_statuses_lower,
@@ -942,7 +1018,6 @@ with tab1:
                 )
 
         with col2:
-            # This selectbox already correctly uses st.session_state for index
             st.session_state['selected_person'] = st.selectbox(
                 "Select Person", person_options, index=current_person_index, key='selected_person_dropdown'
             )
@@ -952,15 +1027,12 @@ with tab1:
                 selected_person_final = st.session_state['selected_person']
 
             default_status_idx = 0
-            # Ensure the value in session state is valid before trying to find its index
             if st.session_state['add_status'] in valid_transaction_statuses_lower:
                 default_status_idx = valid_transaction_statuses_lower.index(st.session_state['add_status'])
             
-            # CORRECTED: Removed explicit default value from 'index' parameter
             status = st.selectbox("Transaction Status", valid_transaction_statuses_lower,
                                   index=default_status_idx,
                                   key='add_status')
-            # CORRECTED: Removed explicit default value from 'value' parameter
             description = st.text_input("Description", value=st.session_state['add_description'], key='add_description')
 
         submitted = st.form_submit_button("Add Transaction")
@@ -1013,6 +1085,12 @@ with tab2:
 
     try:
         df = pd.read_csv(CSV_FILE)
+
+        # --- DEBUG PRINT (to console, not sidebar) ---
+        print("\n--- DEBUG: Raw DataFrame from CSV (Head) ---")
+        print(df.head().to_markdown(index=False, numalign="left", stralign="left"))
+        print("-------------------------------------------\n")
+        # --- END DEBUG PRINT ---
 
         # Check if DataFrame is empty
         if df.empty:
