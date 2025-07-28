@@ -1038,20 +1038,23 @@ with tab1:
 
         submitted = st.form_submit_button("Add Transaction")
         if submitted:
+            validation_passed = True
             if not selected_person_final:
                 st.warning("Please select a valid person.")
-            elif amount <= 0:
+                validation_passed = False
+            if amount <= 0:
                 st.warning("Amount must be greater than 0.")
-            elif not reference_number.strip(): # Ensure reference number is not just whitespace
-                # --- IMPORTANT: Enforce reference number for cheque transactions ---
+                validation_passed = False
+            if not reference_number.strip():
                 if st.session_state['payment_method'] == "cheque":
-                    st.warning("Reference Number is required for cheque transactions.")
-                    st.stop() # Stop execution to prevent adding incomplete data
+                    st.warning(f"🚨 Reference Number is **REQUIRED** for cheque transactions. Current value: '{reference_number.strip()}'")
                 else:
-                    st.warning("Reference Number is required.") # For cash too
-                    st.stop()
-                # --- END IMPORTANT ---
+                    st.warning(f"🚨 Reference Number is required. Current value: '{reference_number.strip()}'")
+                validation_passed = False
             else:
+                st.info(f"Reference Number captured for saving: '{reference_number.strip()}'")
+
+            if validation_passed:
                 try:
                     new_row = {
                         "date": date.strftime("%Y-%m-%d"),
@@ -1067,9 +1070,11 @@ with tab1:
                     }
                     pd.DataFrame([new_row]).to_csv(CSV_FILE, mode='a', header=False, index=False)
                     
-                    # Read the updated CSV and prepare for HTML summary
+                    # Read the updated CSV and CLEAN IT before generating HTML
                     updated_df = pd.read_csv(CSV_FILE)
-                    
+                    updated_df = clean_payments_data(updated_df) # <--- ADDED THIS LINE
+                    updated_df.to_csv(CSV_FILE, index=False) # <--- ADDED THIS LINE TO SAVE CLEANED DF
+
                     html_generated = generate_html_summary(updated_df)
                     git_pushed = False
                     if html_generated: # Only push to git if HTML generation was successful
@@ -1275,18 +1280,20 @@ with tab2:
                     cancel_button = st.form_submit_button("❌ Cancel")
 
                 if submit_button:
+                    validation_passed = True
                     if edited_amount <= 0:
                         st.warning("Amount must be greater than 0.")
-                    elif not edited_reference_number.strip():
-                        # --- IMPORTANT: Enforce reference number for cheque transactions during edit ---
+                        validation_passed = False
+                    if not edited_reference_number.strip():
                         if edited_payment_method == "cheque":
-                            st.warning("Reference Number is required for cheque transactions.")
-                            st.stop()
+                            st.warning(f"🚨 Reference Number is **REQUIRED** for cheque transactions. Current value: '{edited_reference_number.strip()}'")
                         else:
-                            st.warning("Reference Number is required.") # For cash too
-                            st.stop()
-                        # --- END IMPORTANT ---
+                            st.warning(f"🚨 Reference Number is required. Current value: '{edited_reference_number.strip()}'")
+                        validation_passed = False
                     else:
+                        st.info(f"Reference Number captured for saving: '{edited_reference_number.strip()}'")
+
+                    if validation_passed:
                         try:
                             df.loc[st.session_state['editing_row_idx']] = {
                                 "date": edited_date.strftime("%Y-%m-%d"),
@@ -1301,7 +1308,12 @@ with tab2:
                                 "transaction_status": edited_transaction_status # Update 'transaction_status' column
                             }
                             df.to_csv(CSV_FILE, index=False)
-                            generate_html_summary(df) # Pass the updated original df
+
+                            updated_df_after_edit = pd.read_csv(CSV_FILE)
+                            updated_df_after_edit = clean_payments_data(updated_df_after_edit) # <--- ADDED THIS LINE
+                            updated_df_after_edit.to_csv(CSV_FILE, index=False) # <--- ADDED THIS LINE TO SAVE CLEANED DF
+                            
+                            generate_html_summary(updated_df_after_edit) # Pass the CLEANED df
                             git_push()
                             st.success("✅ Transaction updated successfully!")
                             st.session_state['editing_row_idx'] = None
