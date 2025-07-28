@@ -5,3 +5,4 @@ date,person,amount,type,status,description,payment_method,cheque_status,transact
 2025-07-10,Shabbir,1230000.0,i_paid,completed,nan,cheque,processing,completed,completed,,,,
 2025-07-28,Zohaib,500.0,i_paid,completed,F&B,cash,00001,,completed
 2025-07-28,Shabbir,854.0,i_paid,completed,Other_Net_3,cheque,656566465,processing done,completed
+2025-07-28,Rizwan,7000.0,paid_to_me,completed,Testing,cash,787878,,completed
