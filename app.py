@@ -66,11 +66,9 @@ def clean_payments_data(df):
     df['amount'] = pd.to_numeric(df['amount'], errors='coerce').fillna(0.0)
 
     # Convert date to YYYY-MM-DD format, coercing errors to NaT
-    # Removed dayfirst=True as dates are in YYYY-MM-DD
     df['date'] = pd.to_datetime(df['date'], errors='coerce').dt.strftime('%Y-%m-%d').fillna('')
 
     # Rule 1: If payment_method is 'cash', cheque_status must be empty
-    # Ensure payment_method is lowercased for comparison
     cash_payments_mask = df['payment_method'].str.lower() == 'cash'
     df.loc[cash_payments_mask, 'cheque_status'] = '' # Set to empty string for cash payments
 
@@ -81,29 +79,26 @@ def clean_payments_data(df):
         cheque_status_current_lower = row['cheque_status'].lower()
         payment_method_lower = row['payment_method'].lower()
 
-        # Case A: reference_number contains a transaction status
+        # Prioritize moving valid statuses from reference_number if applicable
         if ref_num_lower in valid_transaction_statuses_lower:
-            # If current transaction_status is invalid/empty, move it
             if trans_status_current_lower not in valid_transaction_statuses_lower:
                 df.loc[index, 'transaction_status'] = ref_num_lower
-            df.loc[index, 'reference_number'] = '' # Clear reference_number after moving
-
-        # Case B: reference_number contains a cheque status AND it's a cheque payment
+            df.loc[index, 'reference_number'] = ''
         elif ref_num_lower in valid_cheque_statuses_lower and payment_method_lower == 'cheque':
-            # If current cheque_status is invalid/empty, move it
             if cheque_status_current_lower not in valid_cheque_statuses_lower:
                 df.loc[index, 'cheque_status'] = ref_num_lower
-            df.loc[index, 'reference_number'] = '' # Clear reference_number after moving
+            df.loc[index, 'reference_number'] = ''
 
         # Rule 3: Ensure transaction_status is valid, default to 'completed' if invalid/empty
         if df.loc[index, 'transaction_status'].lower() not in valid_transaction_statuses_lower:
             df.loc[index, 'transaction_status'] = 'completed' # Default to completed
 
-        # Rule 4: Ensure cheque_status is valid for cheque payments, default to empty for others
-        if payment_method_lower == 'cheque' and df.loc[index, 'cheque_status'].lower() not in valid_cheque_statuses_lower:
-            df.loc[index, 'cheque_status'] = '' # Default to empty for invalid cheque status on cheque payments
-        elif payment_method_lower == 'cash':
-            df.loc[index, 'cheque_status'] = '' # Redundant but ensures consistency for cash
+        # Rule 4: Ensure cheque_status is valid for cheque payments, default to 'processing' if invalid/empty
+        if payment_method_lower == 'cheque':
+            if df.loc[index, 'cheque_status'].lower() not in valid_cheque_statuses_lower:
+                df.loc[index, 'cheque_status'] = 'processing' # Default to 'processing' for invalid cheque status
+        else: # For cash payments, ensure cheque_status is empty
+            df.loc[index, 'cheque_status'] = ''
 
     return df
 

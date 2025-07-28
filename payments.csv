@@ -8,7 +8,8 @@ date,person,amount,type,status,description,payment_method,cheque_status,transact
 ,,0.0,,,,,,completed,,,,,
 2025-07-29,Rizwan,2500.0,paid_to_me,completed,FirstAgain5,cash,,completed,,,,,
 ,,0.0,,,,,,completed,,,,,
-2025-07-29,Zohaib,2.0,i_paid,completed,2RupeePeople,cheque,,completed,,,,,
-2025-07-29,Zohaib,20000.0,i_paid,completed,WaddaChange,cheque,,completed,,,,,
+2025-07-29,Zohaib,2.0,i_paid,completed,2RupeePeople,cheque,processing,completed,,,,,
+2025-07-29,Zohaib,20000.0,i_paid,completed,WaddaChange,cheque,processing,completed,,,,,
 ,,0.0,,,,,,completed,,,,,
 2025-07-29,Shabbir,348625.0,i_paid,completed,FirstAgain99,cash,,completed,,,,,
+2025-07-29,Rizwan,383567.0,paid_to_me,completed,FirstAgain999,cash,7548754123,,completed
