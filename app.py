@@ -1045,7 +1045,19 @@ def generate_invoice_pdf(person_name, transactions_df, invoice_type_display, sta
 
         # Save PDF
         os.makedirs(INVOICE_DIR, exist_ok=True)
-        pdf_filename = f"invoice_{person_name.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d%H%M%S')}.pdf"
+        
+        # --- New filename logic ---
+        current_datetime_str = datetime.now().strftime('%Y%m%d_%H%M%S')
+        person_name_clean = person_name.replace(' ', '_').replace('.', '') # Clean name for filename
+
+        if invoice_type_display == "all_transactions":
+            pdf_filename = f"{person_name_clean}_All_Transactions_Invoice_{current_datetime_str}.pdf"
+        else: # specific_date_range
+            start_date_str_file = start_date.strftime('%Y%m%d')
+            end_date_str_file = end_date.strftime('%Y%m%d')
+            pdf_filename = f"{person_name_clean}_Invoice_{start_date_str_file}_to_{end_date_str_file}_{current_datetime_str}.pdf"
+        # --- End new filename logic ---
+
         pdf_file_path = os.path.join(INVOICE_DIR, pdf_filename)
         pdf.output(pdf_file_path)
         
@@ -1529,6 +1541,9 @@ with tab3:
 # ------------------ Tab 4: Generate Invoice ------------------
 with tab4:
     st.subheader("Generate Invoice")
+
+    # Informational message for the user
+    st.info("💡 Please make all your selections (Person, Invoice Type, and Date Range if applicable) before clicking 'Generate Invoice'. The form updates on submission.")
 
     try:
         people_df = pd.read_csv(PEOPLE_FILE)
