@@ -3,6 +3,7 @@ import pandas as pd
 from datetime import datetime
 import os
 from git import Repo
+import numpy as np # Import numpy for nan check
 
 # Session State Initialization - MUST BE AT THE VERY TOP
 def init_state():
@@ -13,7 +14,8 @@ def init_state():
     """
     keys = [
         'selected_transaction_type', 'payment_method', 'editing_row_idx', 'selected_person', 'reset_add_form',
-        'add_amount', 'add_date', 'add_reference_number', 'add_cheque_status', 'add_status', 'add_description'
+        'add_amount', 'add_date', 'add_reference_number', 'add_cheque_status', 'add_status', 'add_description',
+        'temp_edit_data' # Ensure temp_edit_data is initialized
     ]
     defaults = {
         'selected_transaction_type': 'Paid to Me',
@@ -21,12 +23,13 @@ def init_state():
         'editing_row_idx': None,
         'selected_person': "Select...",
         'reset_add_form': False,
-        'add_amount': None, # Initialize to None to avoid conflict with widget's implicit 0.0 default
-        'add_date': None, # Initialize to None to avoid conflict with widget's implicit today's date default
+        'add_amount': None,
+        'add_date': None,
         'add_reference_number': '',
         'add_cheque_status': 'received/given',
         'add_status': 'completed',
-        'add_description': ''
+        'add_description': '',
+        'temp_edit_data': {} # Initialize as empty dict
     }
     for k in keys:
         if k not in st.session_state:
@@ -102,24 +105,11 @@ def clean_payments_data(df):
         else: # For cash payments, ensure cheque_status is empty
             df.loc[index, 'cheque_status'] = ''
 
-    # --- FIX: Specific handling for 'reference_number' to remove .0 and scientific notation ---
-    # This loop ensures that the 'reference_number' column is consistently a clean string.
-    for index, value in df['reference_number'].items():
-        if pd.isna(value) or str(value).strip().lower() == 'nan' or str(value).strip().lower() == 'none':
-            df.loc[index, 'reference_number'] = '' # Ensure it's an empty string
-        else:
-            try:
-                # Attempt to convert to float
-                float_val = float(value)
-                # Check if it's an integer (e.g., 123.0)
-                if float_val == int(float_val):
-                    df.loc[index, 'reference_number'] = str(int(float_val))
-                else:
-                    # Keep as float string if it has decimal component
-                    df.loc[index, 'reference_number'] = str(float_val)
-            except ValueError:
-                # Not a number, keep as is (it's already stripped)
-                df.loc[index, 'reference_number'] = str(value).strip()
+    # --- FIX: Removed numeric conversion for 'reference_number' to preserve leading zeros ---
+    # The reference_number column should always be treated as a string,
+    # so no float conversion is needed here.
+    # The initial read with dtype={'reference_number': str} and the apply
+    # for 'nan'/'None' should be sufficient.
     # --- END FIX ---
 
     # Remove rows where 'date', 'person', 'amount' are all empty/zero after cleaning
@@ -144,9 +134,13 @@ def init_files():
             ]).to_csv(CSV_FILE, index=False)
             st.toast(f"Created new {CSV_FILE}")
         else:
-            # CRITICAL FIX: Force reference_number to be read as string
+            # CRITICAL FIX: Force reference_number to be read as string and handle NA values aggressively
             # This is key to preventing Pandas from inferring it as a number or float
-            df = pd.read_csv(CSV_FILE, dtype={'reference_number': str})
+            df = pd.read_csv(CSV_FILE, dtype={'reference_number': str}, keep_default_na=False)
+            # Ensure any 'nan' strings or actual np.nan values are converted to empty strings immediately
+            df['reference_number'] = df['reference_number'].apply(
+                lambda x: '' if pd.isna(x) or str(x).strip().lower() == 'nan' or str(x).strip().lower() == 'none' else str(x).strip()
+            )
 
             # Handle migration from old format to new format if needed
             if 'receipt_number' in df.columns or 'cheque_number' in df.columns:
@@ -157,16 +151,6 @@ def init_files():
                 ).fillna('')
                 df = df.drop(columns=['receipt_number', 'cheque_number'], errors='ignore')
                 st.toast("Migrated old reference number columns.")
-            
-            # Ensure all expected columns exist before cleaning
-            expected_payment_cols = [
-                "date", "person", "amount", "type", "status",
-                "description", "payment_method", "reference_number",
-                "cheque_status", "transaction_status"
-            ]
-            for col in expected_payment_cols:
-                if col not in df.columns:
-                    df[col] = ''
             
             # CRITICAL: Clean data on load and save back
             df = clean_payments_data(df)
@@ -220,8 +204,7 @@ def git_push():
 
 def prepare_dataframe_for_display(df):
     """
-    Prepares the DataFrame for display by ensuring correct data types,
-    handling missing values, and validating/formatting specific columns.
+    Performs final preparation for displaying the DataFrame, including formatting.
     This function creates new columns for display purposes without altering
     the original DataFrame's data. It's designed to be robust against
     inconsistent data entries in the CSV.
@@ -1071,7 +1054,10 @@ with tab1:
                     pd.DataFrame([new_row]).to_csv(CSV_FILE, mode='a', header=False, index=False)
                     
                     # Read the updated CSV and CLEAN IT before generating HTML
-                    updated_df = pd.read_csv(CSV_FILE, dtype={'reference_number': str}) # Re-read with dtype fix
+                    updated_df = pd.read_csv(CSV_FILE, dtype={'reference_number': str}, keep_default_na=False) # Re-read with dtype fix
+                    updated_df['reference_number'] = updated_df['reference_number'].apply(
+                        lambda x: '' if pd.isna(x) or str(x).strip().lower() == 'nan' or str(x).strip().lower() == 'none' else str(x).strip()
+                    )
                     updated_df = clean_payments_data(updated_df)
                     updated_df.to_csv(CSV_FILE, index=False) # Save the cleaned data back to CSV
 
@@ -1098,7 +1084,10 @@ with tab2:
 
     try:
         # CRITICAL FIX: Force reference_number to be read as string here too
-        df = pd.read_csv(CSV_FILE, dtype={'reference_number': str})
+        df = pd.read_csv(CSV_FILE, dtype={'reference_number': str}, keep_default_na=False)
+        df['reference_number'] = df['reference_number'].apply(
+            lambda x: '' if pd.isna(x) or str(x).strip().lower() == 'nan' or str(x).strip().lower() == 'none' else str(x).strip()
+        )
 
         # Check if DataFrame is empty
         if df.empty:
@@ -1178,7 +1167,16 @@ with tab2:
                 # Set editing_row_idx and load data for editing form
                 if st.session_state['editing_row_idx'] != selected_original_index:
                     st.session_state['editing_row_idx'] = selected_original_index
-                    st.session_state['temp_edit_data'] = df.loc[st.session_state['editing_row_idx']].to_dict()
+                    # FIX: Explicitly handle reference_number to avoid 'nan' in edit form
+                    loaded_edit_data = df.loc[st.session_state['editing_row_idx']].to_dict()
+                    # Ensure reference_number is a clean string for the widget
+                    ref_num_for_widget = loaded_edit_data.get('reference_number', '')
+                    if pd.isna(ref_num_for_widget) or str(ref_num_for_widget).strip().lower() == 'nan' or str(ref_num_for_widget).strip().lower() == 'none':
+                        loaded_edit_data['reference_number'] = ''
+                    else:
+                        loaded_edit_data['reference_number'] = str(ref_num_for_widget).strip()
+
+                    st.session_state['temp_edit_data'] = loaded_edit_data
                     st.rerun() # Rerun to populate the form with data
 
         # Edit Form (appears when editing_row_idx is set)
@@ -1302,7 +1300,10 @@ with tab2:
                             }
                             df.to_csv(CSV_FILE, index=False)
 
-                            updated_df_after_edit = pd.read_csv(CSV_FILE, dtype={'reference_number': str}) # Re-read with dtype fix
+                            updated_df_after_edit = pd.read_csv(CSV_FILE, dtype={'reference_number': str}, keep_default_na=False) # Re-read with dtype fix
+                            updated_df_after_edit['reference_number'] = updated_df_after_edit['reference_number'].apply(
+                                lambda x: '' if pd.isna(x) or str(x).strip().lower() == 'nan' or str(x).strip().lower() == 'none' else str(x).strip()
+                            )
                             updated_df_after_edit = clean_payments_data(updated_df_after_edit)
                             updated_df_after_edit.to_csv(CSV_FILE, index=False) # Save the cleaned DF
                             
@@ -1389,7 +1390,10 @@ with tab3:
 st.sidebar.header("Current Balances")
 try:
     if os.path.exists(CSV_FILE):
-        df_bal = pd.read_csv(CSV_FILE, dtype={'reference_number': str}) # Apply dtype fix here too
+        df_bal = pd.read_csv(CSV_FILE, dtype={'reference_number': str}, keep_default_na=False) # Apply dtype fix here too
+        df_bal['reference_number'] = df_bal['reference_number'].apply(
+            lambda x: '' if pd.isna(x) or str(x).strip().lower() == 'nan' or str(x).strip().lower() == 'none' else str(x).strip()
+        )
         if not df_bal.empty:
             # Ensure columns are treated as strings and amounts as numeric for calculations
             df_bal['amount'] = pd.to_numeric(df_bal['amount'], errors='coerce').fillna(0.0)
