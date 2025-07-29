@@ -1011,12 +1011,12 @@ def generate_invoice_pdf(person_name, transactions_df, invoice_type_display, sta
                 self.ln(10)
 
             def footer(self):
-                self.set_y(-25)
+                self.set_y(-25) # Position 25mm from bottom
                 self.set_font("Arial", "I", 9)
                 self.set_text_color(127, 140, 141) # Light grey for footer text
                 self.cell(0, 5, "Thank you for your business!", ln=True, align='C')
                 self.cell(0, 5, f"© {datetime.now().year} Soft Tech Business System. All Rights Reserved.", ln=True, align='C')
-                self.set_y(-15)
+                self.set_y(-15) # Position for page number
                 self.set_font("Arial", size=8)
                 self.cell(0, 10, f"Page {self.page_no()}/{{nb}}", 0, 0, 'C')
 
@@ -1062,8 +1062,6 @@ def generate_invoice_pdf(person_name, transactions_df, invoice_type_display, sta
             pdf.cell(0, 7, "All Transactions", ln=True)
         elif invoice_type_display == "specific_date_range":
             pdf.cell(0, 7, f"Transactions from {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}", ln=True)
-        # Removed: else: # "selected_transactions"
-        # Removed:    pdf.cell(0, 7, "Selected Transactions", ln=True)
         pdf.ln(10)
 
         # Transaction Table Header
@@ -1071,8 +1069,10 @@ def generate_invoice_pdf(person_name, transactions_df, invoice_type_display, sta
         pdf.set_text_color(73, 80, 87) # Darker grey for header text
         pdf.set_font("Arial", "B", size=8) # Reduced font size for more columns
         
-        # Adjusted column widths for new columns
-        col_widths = [20, 45, 20, 20, 20, 25, 40] # Date, Description, Type, Method, Cheque Status, Reference No., Amount
+        # Adjusted column widths for new columns to prevent overlapping
+        # Total usable width = 210 (A4 width) - 2 * 10 (left/right margins) = 190mm
+        col_widths = [20, 50, 20, 20, 30, 30, 20] # Date, Description, Type, Method, Cheque Status, Reference No., Amount
+        # Sum = 20+50+20+20+30+30+20 = 190mm
 
         pdf.cell(col_widths[0], 10, "Date", 1, 0, 'L', 1)
         pdf.cell(col_widths[1], 10, "Description", 1, 0, 'L', 1)
@@ -1100,19 +1100,44 @@ def generate_invoice_pdf(person_name, transactions_df, invoice_type_display, sta
                     pdf.set_fill_color(255, 255, 255) # White
 
                 # Use 'formatted_date' for display in PDF
+                # Use multi_cell for description to handle wrapping
                 pdf.cell(col_widths[0], 10, str(row_data['formatted_date']), 1, 0, 'L', 1)
-                pdf.cell(col_widths[1], 10, str(row_data['description'] if row_data['description'] else '-'), 1, 0, 'L', 1)
-                pdf.cell(col_widths[2], 10, str(row_data['type_display']), 1, 0, 'L', 1)
-                pdf.cell(col_widths[3], 10, str(row_data['payment_method']).capitalize(), 1, 0, 'L', 1) # New
-                pdf.cell(col_widths[4], 10, str(row_data['cheque_status_display']), 1, 0, 'L', 1) # New
-                pdf.cell(col_widths[5], 10, str(row_data['reference_number_display']), 1, 0, 'L', 1) # New
-                pdf.cell(col_widths[6], 10, f"Rs. {row_data['amount']:,.2f}", 1, 1, 'R', 1)
+                
+                # Store current Y position before multi_cell for alignment
+                x_before_desc = pdf.get_x()
+                y_before_desc = pdf.get_y()
+                
+                # Multi_cell for description to allow text wrapping
+                pdf.multi_cell(col_widths[1], 5, str(row_data['description'] if row_data['description'] else '-'), border=0, align='L', fill=1)
+                
+                # Calculate the height taken by multi_cell and move to the next column's starting X
+                # The height of the row will be determined by the tallest cell (description)
+                y_after_desc = pdf.get_y()
+                row_height = y_after_desc - y_before_desc
+                
+                # Move back to the original Y, and then to the X position for the next column
+                pdf.set_xy(x_before_desc + col_widths[1], y_before_desc)
+
+                pdf.cell(col_widths[2], row_height, str(row_data['type_display']), 1, 0, 'L', 1)
+                pdf.cell(col_widths[3], row_height, str(row_data['payment_method']).capitalize(), 1, 0, 'L', 1) 
+                pdf.cell(col_widths[4], row_height, str(row_data['cheque_status_display']), 1, 0, 'L', 1) 
+                pdf.cell(col_widths[5], row_height, str(row_data['reference_number_display']), 1, 0, 'L', 1) 
+                pdf.cell(col_widths[6], row_height, f"Rs. {row_data['amount']:,.2f}", 1, 1, 'R', 1) # 1,1 moves to next line
+
         else:
             pdf.set_fill_color(255, 255, 255) # White background for no transactions message
             # Adjust cell width to span all columns
             pdf.cell(sum(col_widths), 20, "No transactions found for the selected criteria.", 1, 1, 'C', 1)
 
-        pdf.ln(10)
+        pdf.ln(10) # Add some space after the table
+
+        # Check remaining space before drawing totals to prevent overlap with footer
+        # Footer starts at Y = page_height - 25mm.
+        # If current Y + height_of_totals_section > page_height - 25mm, add new page.
+        # Estimate totals section height: 10mm (Total Amount cell) + 20mm (ln after) = 30mm
+        if pdf.get_y() + 30 > pdf.h - 35: # 35 chosen to give a bit more buffer than footer start (25)
+            pdf.add_page()
+            pdf.ln(20) # Add initial space on new page
 
         # Total Amount Summary
         pdf.set_font("Arial", "B", size=14)
@@ -1135,8 +1160,7 @@ def generate_invoice_pdf(person_name, transactions_df, invoice_type_display, sta
             start_date_str_file = start_date.strftime('%Y%m%d')
             end_date_str_file = end_date.strftime('%Y%m%d')
             pdf_filename = f"{person_name_clean}_Invoice_{start_date_str_file}_to_{end_date_str_file}_{current_datetime_str}.pdf"
-        else: # "selected_transactions" (This case should no longer be hit if the option is removed)
-            # Fallback for safety, though it should ideally not be reached
+        else: # This case should no longer be hit as "selected_transactions" is removed
             pdf_filename = f"{person_name_clean}_Invoice_Generated_{current_datetime_str}.pdf"
         # --- End new filename logic ---
 
