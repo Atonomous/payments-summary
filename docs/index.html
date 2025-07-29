@@ -135,6 +135,21 @@
             margin-right: 10px;
             color: #007bff;
         }
+        .section-subtitle {
+            font-size: 1.3em;
+            color: #34495e;
+            margin-top: 30px;
+            margin-bottom: 15px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 8px;
+            display: flex;
+            align-items: center;
+        }
+        .section-subtitle i {
+            margin-right: 8px;
+            color: #28a745;
+        }
+
 
         .filters {
             background-color: #fdfdfd;
@@ -156,7 +171,8 @@
             color: #555;
         }
         .filter-group select,
-        .filter-group input[type="date"] {
+        .filter-group input[type="date"],
+        .filter-group input[type="text"] {
             width: 100%;
             padding: 10px 12px;
             border: 1px solid #ddd;
@@ -168,7 +184,8 @@
             background-color: #fff;
         }
         .filter-group select:focus,
-        .filter-group input[type="date"]:focus {
+        .filter-group input[type="date"]:focus,
+        .filter-group input[type="text"]:focus {
             border-color: #007bff;
             box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.15);
             outline: none;
@@ -211,7 +228,7 @@
             margin-bottom: 40px;
             background-color: #fdfdfd;
             border-radius: 10px;
-            overflow: hidden; /* Ensures rounded corners apply to content */
+            overflow: hidden;
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.06);
         }
         th, td {
@@ -279,7 +296,85 @@
             color: #95a5a6;
         }
 
-        /* Responsive adjustments */
+        .tabs {
+            margin-top: 30px;
+            margin-bottom: 40px;
+        }
+        .tab-buttons {
+            display: flex;
+            border-bottom: 2px solid #ddd;
+            margin-bottom: 20px;
+        }
+        .tab-button {
+            padding: 12px 25px;
+            cursor: pointer;
+            font-size: 1.1em;
+            font-weight: 500;
+            color: #555;
+            background-color: #f8f8f8;
+            border: 1px solid #ddd;
+            border-bottom: none;
+            border-top-left-radius: 8px;
+            border-top-right-radius: 8px;
+            margin-right: 5px;
+            transition: all 0.3s ease;
+        }
+        .tab-button:hover {
+            background-color: #eee;
+            color: #333;
+        }
+        .tab-button.active {
+            background-color: #ffffff;
+            color: #007bff;
+            border-color: #007bff;
+            border-bottom: 2px solid #ffffff;
+            transform: translateY(2px);
+            box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.05);
+            z-index: 1;
+        }
+        .tab-content {
+            background-color: #ffffff;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+            position: relative;
+            top: -2px;
+        }
+        .tab-pane {
+            display: none;
+        }
+        .tab-pane.active {
+            display: block;
+        }
+
+        .client-summary-table .positive-balance { color: #28a745; font-weight: 600; }
+        .client-summary-table .negative-balance { color: #dc3545; font-weight: 600; }
+
+        .download-button-container {
+            text-align: right;
+            margin-bottom: 20px;
+        }
+        .download-button {
+            background-color: #28a745;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: 500;
+            transition: background-color 0.3s ease, transform 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+        }
+        .download-button i {
+            margin-right: 8px;
+        }
+        .download-button:hover {
+            background-color: #218838;
+            transform: translateY(-2px);
+        }
+
         @media (max-width: 768px) {
             .summary-cards {
                 grid-template-columns: 1fr;
@@ -326,7 +421,6 @@
                 font-weight: 600;
                 color: #555;
             }
-            /* Specific labels for mobile view */
             td:nth-of-type(1):before { content: "Date"; }
             td:nth-of-type(2):before { content: "Person"; }
             td:nth-of-type(3):before { content: "Amount"; }
@@ -336,18 +430,95 @@
             td:nth-of-type(7):before { content: "Reference No."; }
             td:nth-of-type(8):before { content: "Status"; }
             td:nth-of-type(9):before { content: "Description"; }
+
+            .client-summary-table td:nth-of-type(1):before { content: "Client Name"; }
+            .client-summary-table td:nth-of-type(2):before { content: "Total Paid"; }
+            .client-summary-table td:nth-of-type(3):before { content: "Total Spent"; }
+            .client-summary-table td:nth-of-type(4):before { content: "Balance"; }
+
+            .detailed-expenses-table td:nth-of-type(1):before { content: "Date"; }
+            .detailed-expenses-table td:nth-of-type(2):before { content: "Client Name"; }
+            .detailed-expenses-table td:nth-of-type(3):before { content: "Category"; }
+            .detailed-expenses-table td:nth-of-type(4):before { content: "Amount"; }
+            .detailed-expenses-table td:nth-of-type(5):before { content: "Description"; }
+        }
+
+        @media print {
+            body {
+                background-color: #fff;
+                margin: 0;
+                padding: 0;
+            }
+            .container {
+                box-shadow: none;
+                border-radius: 0;
+                margin: 0;
+                padding: 0;
+                max-width: none;
+            }
+            header, .summary-cards, .filters, .tabs, .tab-buttons, .tab-content {
+                box-shadow: none !important;
+                border: none !important;
+                margin: 0 !important;
+                padding: 0 !important;
+            }
+            .tab-button, .tab-pane {
+                display: block !important;
+                width: 100% !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                background-color: #fff !important;
+                border: none !important;
+            }
+            .tab-buttons {
+                display: none;
+            }
+            .tab-pane.active {
+                display: block;
+            }
+            .download-button-container, .footer {
+                display: none;
+            }
+            table {
+                box_shadow: none;
+                border_radius: 0;
+                margin_bottom: 20px;
+            }
+            th, td {
+                border: 1px solid #ddd;
+                padding: 8px;
+            }
+            .no-results {
+                display: none;
+            }
+            .section-title, .section-subtitle {
+                page-break-after: avoid;
+                margin-top: 20px;
+                margin-bottom: 10px;
+                padding-bottom: 5px;
+                border-bottom: 1px solid #ccc;
+            }
         }
     </style>
     <script>
         $(document).ready(function() {
-            // Set default date range on load
             const today = new Date();
             const oneMonthAgo = new Date();
             oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
             $('#start-date').val(oneMonthAgo.toISOString().split('T')[0]);
             $('#end-date').val(today.toISOString().split('T')[0]);
 
-            applyFilters(); // Apply filters immediately on page load with default dates
+            applyFilters();
+
+            $('.tab-button').on('click', function() {
+                const tabId = $(this).data('tab');
+                $('.tab-button').removeClass('active');
+                $(this).addClass('active');
+                $('.tab-pane').removeClass('active');
+                $('#' + tabId).addClass('active');
+            });
+
+            $('.tab-button[data-tab="transactions-tab"]').click();
         });
 
         function applyFilters() {
@@ -357,80 +528,44 @@
             const type = $('#type-filter').val();
             const method = $('#method-filter').val().toLowerCase();
             const chequeStatus = $('#status-filter').val().toLowerCase();
-
-            console.log("--- Applying Filters ---");
-            console.log("Start Date:", startDate);
-            console.log("End Date:", endDate);
-            console.log("Person Filter:", person);
-            console.log("Type Filter:", type);
-            console.log("Method Filter:", method);
-            console.log("Cheque Status Filter:", chequeStatus);
+            const referenceNumber = $('#reference-number-filter').val().toLowerCase();
 
             let visibleRows = 0;
 
             $('#transactions-table tbody tr').each(function() {
-                const rowDate = $(this).data('date'); // This will be YYYY-MM-DD
+                const rowDate = $(this).data('date');
                 const rowPerson = $(this).data('person').toString().toLowerCase();
                 const rowType = $(this).data('type');
                 const rowMethod = $(this).data('method').toString().toLowerCase();
                 const rowChequeStatus = $(this).data('cheque-status').toString().toLowerCase();
+                const rowReferenceNumber = $(this).data('reference-number').toString().toLowerCase();
 
-                console.log("Processing Row:", { rowDate, rowPerson, rowType, rowMethod, rowChequeStatus });
-
-                // Date filter: Compare YYYY-MM-DD strings directly
                 const datePass = (!startDate || rowDate >= startDate) && (!endDate || rowDate <= endDate);
-
-                // Person filter
                 const personPass = !person || rowPerson.includes(person);
-
-                // Type filter
                 const typePass = !type || rowType === type;
-
-                // Method filter
                 const methodPass = !method || rowMethod === method;
+                const chequeStatusPass = !chequeStatus || (rowChequeStatus && rowChequeStatus.includes(chequeStatus));
+                const referenceNumberPass = !referenceNumber || rowReferenceNumber.includes(referenceNumber);
 
-                // Cheque status filter
-                const chequeStatusPass = !chequeStatus ||
-                                      (rowChequeStatus && rowChequeStatus.includes(chequeStatus));
-
-                if (datePass && personPass && typePass && methodPass && chequeStatusPass) {
+                if (datePass && personPass && typePass && methodPass && chequeStatusPass && referenceNumberPass) {
                     $(this).show();
                     visibleRows++;
-                    console.log("Row PASSED filters.");
                 } else {
                     $(this).hide();
-                    console.log("Row FAILED filters.");
                 }
             });
 
-            // Show/hide no results message
             if (visibleRows === 0) {
                 $('#no-results').show();
                 $('#transactions-table').hide();
-                console.log("No results found.");
             } else {
                 $('#no-results').hide();
                 $('#transactions-table').show();
-                console.log(visibleRows + " results found.");
             }
-            console.log("--- Filters Applied ---");
         }
 
-        function resetFilters() {
-            // Reset select inputs
-            $('#name-filter').val('');
-            $('#type-filter').val('');
-            $('#method-filter').val('');
-            $('#status-filter').val('');
-
-            // Reset date inputs to default range
-            const today = new Date();
-            const oneMonthAgo = new Date();
-            oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
-            $('#start-date').val(oneMonthAgo.toISOString().split('T')[0]);
-            $('#end-date').val(today.toISOString().split('T')[0]);
-            
-            applyFilters(); // Apply filters after resetting
+        function downloadPdf() {
+            window.print();
         }
     </script>
 </head>
@@ -442,7 +577,7 @@
             </div>
             <h1 class="report-title">Payment Summary Report</h1>
             <div class="report-date">
-                <i class="far fa-calendar-alt"></i> July 29, 2025 at 04:14 PM
+                <i class="far fa-calendar-alt"></i> July 30, 2025 at 12:54 AM
             </div>
         </header>
 
@@ -549,6 +684,11 @@
                         <option value="processing done">Processing Done</option>
                     </select>
                 </div>
+                
+                <div class="filter-group">
+                    <label for="reference-number-filter">Reference Number</label>
+                    <input type="text" id="reference-number-filter" placeholder="Search by reference number">
+                </div>
             </div>
 
             <div class="filter-actions">
@@ -561,426 +701,540 @@
             </div>
         </div>
 
-        <h2 class="section-title">
-            <i class="fas fa-list"></i> All Transactions
-        </h2>
+        <div class="tabs">
+            <div class="tab-buttons">
+                <button class="tab-button" data-tab="transactions-tab">
+                    <i class="fas fa-list"></i> All Transactions
+                </button>
+                <button class="tab-button" data-tab="client-expenses-tab">
+                    <i class="fas fa-money-check-alt"></i> Client Expenses
+                </button>
+            </div>
 
-        <div class="no-results" id="no-results">
-            <i class="fas fa-search" style="font-size: 24px; margin-bottom: 10px;"></i>
-            <p>No transactions match your filters</p>
+            <div class="tab-content">
+                <div id="transactions-tab" class="tab-pane">
+                    <h2 class="section-title">
+                        <i class="fas fa-list"></i> All Transactions
+                    </h2>
+                    <div class="no-results" id="no-results">
+                        <i class="fas fa-search" style="font-size: 24px; margin-bottom: 10px;"></i>
+                        <p>No transactions match your filters</p>
+                    </div>
+
+                    <table id="transactions-table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Person</th>
+                                <th>Amount</th>
+                                <th>Type</th>
+                                <th>Method</th>
+                                <th>Cheque Status</th>
+                                <th>Reference No.</th>
+                                <th>Status</th>
+                                <th>Description</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr data-date="2025-02-05"
+                                data-person="Butt Fitness"
+                                data-type="i_paid"
+                                data-method="cash"
+                                data-cheque-status=""
+                                data-reference-number="764206">
+                                <td>2025-02-05</td>
+                                <td>Butt Fitness</td>
+                                <td>Rs. 500,000.00</td>
+                                <td>Paid</td>
+                                <td>Cash</td>
+                                <td><span class="status ">-</span></td>
+                                <td>764206</td>
+                                <td><span class="status completed">Completed</span></td>
+                                <td>Meezan Bank</td>
+                            </tr>
+                            <tr data-date="2025-11-05"
+                                data-person="Butt Fitness"
+                                data-type="i_paid"
+                                data-method="cash"
+                                data-cheque-status=""
+                                data-reference-number="360842">
+                                <td>2025-11-05</td>
+                                <td>Butt Fitness</td>
+                                <td>Rs. 1,000,000.00</td>
+                                <td>Paid</td>
+                                <td>Cash</td>
+                                <td><span class="status ">-</span></td>
+                                <td>360842</td>
+                                <td><span class="status completed">Completed</span></td>
+                                <td>Meezan Bank</td>
+                            </tr>
+                            <tr data-date="2025-05-13"
+                                data-person="Butt Fitness"
+                                data-type="i_paid"
+                                data-method="cash"
+                                data-cheque-status=""
+                                data-reference-number="326547">
+                                <td>2025-05-13</td>
+                                <td>Butt Fitness</td>
+                                <td>Rs. 1,100,000.00</td>
+                                <td>Paid</td>
+                                <td>Cash</td>
+                                <td><span class="status ">-</span></td>
+                                <td>326547</td>
+                                <td><span class="status completed">Completed</span></td>
+                                <td>Meezan Bank</td>
+                            </tr>
+                            <tr data-date="2025-05-19"
+                                data-person="Butt Fitness"
+                                data-type="i_paid"
+                                data-method="cash"
+                                data-cheque-status=""
+                                data-reference-number="494860">
+                                <td>2025-05-19</td>
+                                <td>Butt Fitness</td>
+                                <td>Rs. 650,000.00</td>
+                                <td>Paid</td>
+                                <td>Cash</td>
+                                <td><span class="status ">-</span></td>
+                                <td>494860</td>
+                                <td><span class="status completed">Completed</span></td>
+                                <td>Meezan Bank</td>
+                            </tr>
+                            <tr data-date="2025-05-19"
+                                data-person="Butt Fitness"
+                                data-type="i_paid"
+                                data-method="cash"
+                                data-cheque-status=""
+                                data-reference-number="#ft251490rr2l3q2x">
+                                <td>2025-05-19</td>
+                                <td>Butt Fitness</td>
+                                <td>Rs. 750,000.00</td>
+                                <td>Paid</td>
+                                <td>Cash</td>
+                                <td><span class="status ">-</span></td>
+                                <td>#FT251490RR2L3Q2X</td>
+                                <td><span class="status completed">Completed</span></td>
+                                <td>Bank Alfa</td>
+                            </tr>
+                            <tr data-date="2025-05-30"
+                                data-person="Butt Fitness"
+                                data-type="i_paid"
+                                data-method="cash"
+                                data-cheque-status=""
+                                data-reference-number="593031">
+                                <td>2025-05-30</td>
+                                <td>Butt Fitness</td>
+                                <td>Rs. 1,000,000.00</td>
+                                <td>Paid</td>
+                                <td>Cash</td>
+                                <td><span class="status ">-</span></td>
+                                <td>593031</td>
+                                <td><span class="status completed">Completed</span></td>
+                                <td>Meezan Bank</td>
+                            </tr>
+                            <tr data-date="2025-06-06"
+                                data-person="Butt Fitness"
+                                data-type="i_paid"
+                                data-method="cash"
+                                data-cheque-status=""
+                                data-reference-number="483955">
+                                <td>2025-06-06</td>
+                                <td>Butt Fitness</td>
+                                <td>Rs. 1,000,000.00</td>
+                                <td>Paid</td>
+                                <td>Cash</td>
+                                <td><span class="status ">-</span></td>
+                                <td>483955</td>
+                                <td><span class="status completed">Completed</span></td>
+                                <td>Meezan Bank</td>
+                            </tr>
+                            <tr data-date="2025-05-06"
+                                data-person="Butt Fitness"
+                                data-type="i_paid"
+                                data-method="cash"
+                                data-cheque-status=""
+                                data-reference-number="ca0000000011">
+                                <td>2025-05-06</td>
+                                <td>Butt Fitness</td>
+                                <td>Rs. 3,000,000.00</td>
+                                <td>Paid</td>
+                                <td>Cash</td>
+                                <td><span class="status ">-</span></td>
+                                <td>CA0000000011</td>
+                                <td><span class="status completed">Completed</span></td>
+                                <td>Faysal Bank</td>
+                            </tr>
+                            <tr data-date="2025-09-05"
+                                data-person="Butt Fitness"
+                                data-type="i_paid"
+                                data-method="cash"
+                                data-cheque-status=""
+                                data-reference-number="ca0000000039">
+                                <td>2025-09-05</td>
+                                <td>Butt Fitness</td>
+                                <td>Rs. 2,500,000.00</td>
+                                <td>Paid</td>
+                                <td>Cash</td>
+                                <td><span class="status ">-</span></td>
+                                <td>CA0000000039</td>
+                                <td><span class="status completed">Completed</span></td>
+                                <td>Faysal Bank</td>
+                            </tr>
+                            <tr data-date="2025-06-16"
+                                data-person="Butt Fitness"
+                                data-type="i_paid"
+                                data-method="cash"
+                                data-cheque-status=""
+                                data-reference-number="378200">
+                                <td>2025-06-16</td>
+                                <td>Butt Fitness</td>
+                                <td>Rs. 3,000,000.00</td>
+                                <td>Paid</td>
+                                <td>Cash</td>
+                                <td><span class="status ">-</span></td>
+                                <td>378200</td>
+                                <td><span class="status completed">Completed</span></td>
+                                <td>Meezan Bank</td>
+                            </tr>
+                            <tr data-date="2025-06-23"
+                                data-person="Butt Fitness"
+                                data-type="i_paid"
+                                data-method="cash"
+                                data-cheque-status=""
+                                data-reference-number="216760">
+                                <td>2025-06-23</td>
+                                <td>Butt Fitness</td>
+                                <td>Rs. 3,000,000.00</td>
+                                <td>Paid</td>
+                                <td>Cash</td>
+                                <td><span class="status ">-</span></td>
+                                <td>216760</td>
+                                <td><span class="status completed">Completed</span></td>
+                                <td>Meezan Bank</td>
+                            </tr>
+                            <tr data-date="2025-06-26"
+                                data-person="Butt Fitness"
+                                data-type="i_paid"
+                                data-method="cash"
+                                data-cheque-status=""
+                                data-reference-number="505213">
+                                <td>2025-06-26</td>
+                                <td>Butt Fitness</td>
+                                <td>Rs. 2,000,000.00</td>
+                                <td>Paid</td>
+                                <td>Cash</td>
+                                <td><span class="status ">-</span></td>
+                                <td>505213</td>
+                                <td><span class="status completed">Completed</span></td>
+                                <td>Meezan Bank</td>
+                            </tr>
+                            <tr data-date="2025-01-07"
+                                data-person="Butt Fitness"
+                                data-type="i_paid"
+                                data-method="cash"
+                                data-cheque-status=""
+                                data-reference-number="416723">
+                                <td>2025-01-07</td>
+                                <td>Butt Fitness</td>
+                                <td>Rs. 1,000,000.00</td>
+                                <td>Paid</td>
+                                <td>Cash</td>
+                                <td><span class="status ">-</span></td>
+                                <td>416723</td>
+                                <td><span class="status completed">Completed</span></td>
+                                <td>Meezan Bank</td>
+                            </tr>
+                            <tr data-date="2025-08-07"
+                                data-person="Butt Fitness"
+                                data-type="i_paid"
+                                data-method="cash"
+                                data-cheque-status=""
+                                data-reference-number="842448">
+                                <td>2025-08-07</td>
+                                <td>Butt Fitness</td>
+                                <td>Rs. 500,000.00</td>
+                                <td>Paid</td>
+                                <td>Cash</td>
+                                <td><span class="status ">-</span></td>
+                                <td>842448</td>
+                                <td><span class="status completed">Completed</span></td>
+                                <td>Meezan Bank</td>
+                            </tr>
+                            <tr data-date="2025-09-07"
+                                data-person="Butt Fitness"
+                                data-type="i_paid"
+                                data-method="cash"
+                                data-cheque-status=""
+                                data-reference-number="#ft251910xxptdwxq">
+                                <td>2025-09-07</td>
+                                <td>Butt Fitness</td>
+                                <td>Rs. 400,000.00</td>
+                                <td>Paid</td>
+                                <td>Cash</td>
+                                <td><span class="status ">-</span></td>
+                                <td>#FT251910XXPTDWXQ</td>
+                                <td><span class="status completed">Completed</span></td>
+                                <td>Bank Alfa</td>
+                            </tr>
+                            <tr data-date="2025-07-25"
+                                data-person="Butt Fitness"
+                                data-type="i_paid"
+                                data-method="cash"
+                                data-cheque-status=""
+                                data-reference-number="411625">
+                                <td>2025-07-25</td>
+                                <td>Butt Fitness</td>
+                                <td>Rs. 200,000.00</td>
+                                <td>Paid</td>
+                                <td>Cash</td>
+                                <td><span class="status ">-</span></td>
+                                <td>411625</td>
+                                <td><span class="status completed">Completed</span></td>
+                                <td>Meezan Bank</td>
+                            </tr>
+                            <tr data-date="2025-04-17"
+                                data-person="H.M. Fitness"
+                                data-type="i_paid"
+                                data-method="cash"
+                                data-cheque-status=""
+                                data-reference-number="230902">
+                                <td>2025-04-17</td>
+                                <td>H.M. Fitness</td>
+                                <td>Rs. 100,000.00</td>
+                                <td>Paid</td>
+                                <td>Cash</td>
+                                <td><span class="status ">-</span></td>
+                                <td>230902</td>
+                                <td><span class="status completed">Completed</span></td>
+                                <td>United Bank Limited</td>
+                            </tr>
+                            <tr data-date="2025-05-17"
+                                data-person="H.M. Fitness"
+                                data-type="i_paid"
+                                data-method="cash"
+                                data-cheque-status=""
+                                data-reference-number="577478">
+                                <td>2025-05-17</td>
+                                <td>H.M. Fitness</td>
+                                <td>Rs. 500,000.00</td>
+                                <td>Paid</td>
+                                <td>Cash</td>
+                                <td><span class="status ">-</span></td>
+                                <td>577478</td>
+                                <td><span class="status completed">Completed</span></td>
+                                <td>United Bank Limited</td>
+                            </tr>
+                            <tr data-date="2025-05-20"
+                                data-person="H.M. Fitness"
+                                data-type="i_paid"
+                                data-method="cash"
+                                data-cheque-status=""
+                                data-reference-number="ft2514101nwfdlbp">
+                                <td>2025-05-20</td>
+                                <td>H.M. Fitness</td>
+                                <td>Rs. 500,000.00</td>
+                                <td>Paid</td>
+                                <td>Cash</td>
+                                <td><span class="status ">-</span></td>
+                                <td>FT2514101NWFDLBP</td>
+                                <td><span class="status completed">Completed</span></td>
+                                <td>Bank Alfa</td>
+                            </tr>
+                            <tr data-date="2025-05-06"
+                                data-person="H.M. Fitness"
+                                data-type="i_paid"
+                                data-method="cash"
+                                data-cheque-status=""
+                                data-reference-number="798625">
+                                <td>2025-05-06</td>
+                                <td>H.M. Fitness</td>
+                                <td>Rs. 500,000.00</td>
+                                <td>Paid</td>
+                                <td>Cash</td>
+                                <td><span class="status ">-</span></td>
+                                <td>798625</td>
+                                <td><span class="status completed">Completed</span></td>
+                                <td>United Bank Limited</td>
+                            </tr>
+                            <tr data-date="2025-05-31"
+                                data-person="H.M. Fitness"
+                                data-type="i_paid"
+                                data-method="cash"
+                                data-cheque-status=""
+                                data-reference-number="499282">
+                                <td>2025-05-31</td>
+                                <td>H.M. Fitness</td>
+                                <td>Rs. 1,000,000.00</td>
+                                <td>Paid</td>
+                                <td>Cash</td>
+                                <td><span class="status ">-</span></td>
+                                <td>499282</td>
+                                <td><span class="status completed">Completed</span></td>
+                                <td>United Bank Limited</td>
+                            </tr>
+                            <tr data-date="2025-06-16"
+                                data-person="H.M. Fitness"
+                                data-type="i_paid"
+                                data-method="cash"
+                                data-cheque-status=""
+                                data-reference-number="373827">
+                                <td>2025-06-16</td>
+                                <td>H.M. Fitness</td>
+                                <td>Rs. 1,000,000.00</td>
+                                <td>Paid</td>
+                                <td>Cash</td>
+                                <td><span class="status ">-</span></td>
+                                <td>373827</td>
+                                <td><span class="status completed">Completed</span></td>
+                                <td>United Bank Limited</td>
+                            </tr>
+                            <tr data-date="2025-06-21"
+                                data-person="H.M. Fitness"
+                                data-type="i_paid"
+                                data-method="cash"
+                                data-cheque-status=""
+                                data-reference-number="509991">
+                                <td>2025-06-21</td>
+                                <td>H.M. Fitness</td>
+                                <td>Rs. 532,000.00</td>
+                                <td>Paid</td>
+                                <td>Cash</td>
+                                <td><span class="status ">-</span></td>
+                                <td>509991</td>
+                                <td><span class="status completed">Completed</span></td>
+                                <td>United Bank Limited</td>
+                            </tr>
+                            <tr data-date="2025-06-25"
+                                data-person="H.M. Fitness"
+                                data-type="i_paid"
+                                data-method="cash"
+                                data-cheque-status=""
+                                data-reference-number="425398">
+                                <td>2025-06-25</td>
+                                <td>H.M. Fitness</td>
+                                <td>Rs. 500,000.00</td>
+                                <td>Paid</td>
+                                <td>Cash</td>
+                                <td><span class="status ">-</span></td>
+                                <td>425398</td>
+                                <td><span class="status completed">Completed</span></td>
+                                <td>United Bank Limited</td>
+                            </tr>
+                            <tr data-date="2025-01-07"
+                                data-person="H.M. Fitness"
+                                data-type="i_paid"
+                                data-method="cheque"
+                                data-cheque-status="processing done"
+                                data-reference-number="ca0000000024">
+                                <td>2025-01-07</td>
+                                <td>H.M. Fitness</td>
+                                <td>Rs. 800,000.00</td>
+                                <td>Paid</td>
+                                <td>Cheque</td>
+                                <td><span class="status processing-done">Processing done</span></td>
+                                <td>CA0000000024</td>
+                                <td><span class="status completed">Completed</span></td>
+                                <td>Faysal Bank</td>
+                            </tr>
+                            <tr data-date="2025-02-07"
+                                data-person="H.M. Fitness"
+                                data-type="i_paid"
+                                data-method="cash"
+                                data-cheque-status=""
+                                data-reference-number="52372192">
+                                <td>2025-02-07</td>
+                                <td>H.M. Fitness</td>
+                                <td>Rs. 700,000.00</td>
+                                <td>Paid</td>
+                                <td>Cash</td>
+                                <td><span class="status ">-</span></td>
+                                <td>52372192</td>
+                                <td><span class="status completed">Completed</span></td>
+                                <td>Bank Alfalah</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div id="client-expenses-tab" class="tab-pane">
+                    <div class="download-button-container">
+                        <button class="download-button" onclick="downloadPdf()">
+                            <i class="fas fa-file-pdf"></i> Download as PDF
+                        </button>
+                    </div>
+                    <h2 class="section-title">
+                        <i class="fas fa-money-check-alt"></i> Client Expenses Overview
+                    </h2>
+                    
+            <h3 class="section-subtitle"><i class="fas fa-chart-pie"></i> Spending Overview by Client</h3>
+            <table class="client-summary-table">
+                <thead>
+                    <tr>
+                        <th>Client Name</th>
+                        <th>Total Paid to Client</th>
+                        <th>Total Spent by Client</th>
+                        <th>Remaining Balance</th>
+                    </tr>
+                </thead>
+                <tbody>
+            
+                    <tr>
+                        <td>Butt Fitness</td>
+                        <td>Rs. 21,600,000.00</td>
+                        <td>Rs. 2,200.00</td>
+                        <td class="positive-balance">Rs. 21,597,800.00</td>
+                    </tr>
+                
+                    <tr>
+                        <td>H.M. Fitness</td>
+                        <td>Rs. 6,132,000.00</td>
+                        <td>Rs. 0.00</td>
+                        <td class="positive-balance">Rs. 6,132,000.00</td>
+                    </tr>
+                
+                </tbody>
+            </table>
+            
+                    
+            <h3 class="section-subtitle"><i class="fas fa-list-alt"></i> Detailed Client Expenses</h3>
+            <table class="detailed-expenses-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Client Name</th>
+                        <th>Category</th>
+                        <th>Amount</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+            
+                    <tr>
+                        <td>2025-07-30</td>
+                        <td>Butt Fitness</td>
+                        <td>General</td>
+                        <td>Rs. 200.00</td>
+                        <td>F&B</td>
+                    </tr>
+                
+                    <tr>
+                        <td>2025-07-02</td>
+                        <td>Butt Fitness</td>
+                        <td>General</td>
+                        <td>Rs. 2,000.00</td>
+                        <td>inDrive</td>
+                    </tr>
+                
+                </tbody>
+            </table>
+            
+                </div>
+            </div>
         </div>
-
-        <table id="transactions-table">
-            <thead>
-                <tr>
-                    <th>Date</th>
-                    <th>Person</th>
-                    <th>Amount</th>
-                    <th>Type</th>
-                    <th>Method</th>
-                    <th>Cheque Status</th>
-                    <th>Reference No.</th>
-                    <th>Status</th>
-                    <th>Description</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr data-date="2025-02-05"
-                    data-person="Butt Fitness"
-                    data-type="i_paid"
-                    data-method="cash"
-                    data-cheque-status="">
-                    <td>2025-02-05</td>
-                    <td>Butt Fitness</td>
-                    <td>Rs. 500,000.00</td>
-                    <td>Paid</td>
-                    <td>Cash</td>
-                    <td><span class="status ">-</span></td>
-                    <td>764206</td>
-                    <td><span class="status completed">Completed</span></td>
-                    <td>Meezan Bank</td>
-                </tr>
-                <tr data-date="2025-11-05"
-                    data-person="Butt Fitness"
-                    data-type="i_paid"
-                    data-method="cash"
-                    data-cheque-status="">
-                    <td>2025-11-05</td>
-                    <td>Butt Fitness</td>
-                    <td>Rs. 1,000,000.00</td>
-                    <td>Paid</td>
-                    <td>Cash</td>
-                    <td><span class="status ">-</span></td>
-                    <td>360842</td>
-                    <td><span class="status completed">Completed</span></td>
-                    <td>Meezan Bank</td>
-                </tr>
-                <tr data-date="2025-05-13"
-                    data-person="Butt Fitness"
-                    data-type="i_paid"
-                    data-method="cash"
-                    data-cheque-status="">
-                    <td>2025-05-13</td>
-                    <td>Butt Fitness</td>
-                    <td>Rs. 1,100,000.00</td>
-                    <td>Paid</td>
-                    <td>Cash</td>
-                    <td><span class="status ">-</span></td>
-                    <td>326547</td>
-                    <td><span class="status completed">Completed</span></td>
-                    <td>Meezan Bank</td>
-                </tr>
-                <tr data-date="2025-05-19"
-                    data-person="Butt Fitness"
-                    data-type="i_paid"
-                    data-method="cash"
-                    data-cheque-status="">
-                    <td>2025-05-19</td>
-                    <td>Butt Fitness</td>
-                    <td>Rs. 650,000.00</td>
-                    <td>Paid</td>
-                    <td>Cash</td>
-                    <td><span class="status ">-</span></td>
-                    <td>494860</td>
-                    <td><span class="status completed">Completed</span></td>
-                    <td>Meezan Bank</td>
-                </tr>
-                <tr data-date="2025-05-19"
-                    data-person="Butt Fitness"
-                    data-type="i_paid"
-                    data-method="cash"
-                    data-cheque-status="">
-                    <td>2025-05-19</td>
-                    <td>Butt Fitness</td>
-                    <td>Rs. 750,000.00</td>
-                    <td>Paid</td>
-                    <td>Cash</td>
-                    <td><span class="status ">-</span></td>
-                    <td>#FT251490RR2L3Q2X</td>
-                    <td><span class="status completed">Completed</span></td>
-                    <td>Bank Alfa</td>
-                </tr>
-                <tr data-date="2025-05-30"
-                    data-person="Butt Fitness"
-                    data-type="i_paid"
-                    data-method="cash"
-                    data-cheque-status="">
-                    <td>2025-05-30</td>
-                    <td>Butt Fitness</td>
-                    <td>Rs. 1,000,000.00</td>
-                    <td>Paid</td>
-                    <td>Cash</td>
-                    <td><span class="status ">-</span></td>
-                    <td>593031</td>
-                    <td><span class="status completed">Completed</span></td>
-                    <td>Meezan Bank</td>
-                </tr>
-                <tr data-date="2025-06-06"
-                    data-person="Butt Fitness"
-                    data-type="i_paid"
-                    data-method="cash"
-                    data-cheque-status="">
-                    <td>2025-06-06</td>
-                    <td>Butt Fitness</td>
-                    <td>Rs. 1,000,000.00</td>
-                    <td>Paid</td>
-                    <td>Cash</td>
-                    <td><span class="status ">-</span></td>
-                    <td>483955</td>
-                    <td><span class="status completed">Completed</span></td>
-                    <td>Meezan Bank</td>
-                </tr>
-                <tr data-date="2025-05-06"
-                    data-person="Butt Fitness"
-                    data-type="i_paid"
-                    data-method="cash"
-                    data-cheque-status="">
-                    <td>2025-05-06</td>
-                    <td>Butt Fitness</td>
-                    <td>Rs. 3,000,000.00</td>
-                    <td>Paid</td>
-                    <td>Cash</td>
-                    <td><span class="status ">-</span></td>
-                    <td>CA0000000011</td>
-                    <td><span class="status completed">Completed</span></td>
-                    <td>Faysal Bank</td>
-                </tr>
-                <tr data-date="2025-09-05"
-                    data-person="Butt Fitness"
-                    data-type="i_paid"
-                    data-method="cash"
-                    data-cheque-status="">
-                    <td>2025-09-05</td>
-                    <td>Butt Fitness</td>
-                    <td>Rs. 2,500,000.00</td>
-                    <td>Paid</td>
-                    <td>Cash</td>
-                    <td><span class="status ">-</span></td>
-                    <td>CA0000000039</td>
-                    <td><span class="status completed">Completed</span></td>
-                    <td>Faysal Bank</td>
-                </tr>
-                <tr data-date="2025-06-16"
-                    data-person="Butt Fitness"
-                    data-type="i_paid"
-                    data-method="cash"
-                    data-cheque-status="">
-                    <td>2025-06-16</td>
-                    <td>Butt Fitness</td>
-                    <td>Rs. 3,000,000.00</td>
-                    <td>Paid</td>
-                    <td>Cash</td>
-                    <td><span class="status ">-</span></td>
-                    <td>378200</td>
-                    <td><span class="status completed">Completed</span></td>
-                    <td>Meezan Bank</td>
-                </tr>
-                <tr data-date="2025-06-23"
-                    data-person="Butt Fitness"
-                    data-type="i_paid"
-                    data-method="cash"
-                    data-cheque-status="">
-                    <td>2025-06-23</td>
-                    <td>Butt Fitness</td>
-                    <td>Rs. 3,000,000.00</td>
-                    <td>Paid</td>
-                    <td>Cash</td>
-                    <td><span class="status ">-</span></td>
-                    <td>216760</td>
-                    <td><span class="status completed">Completed</span></td>
-                    <td>Meezan Bank</td>
-                </tr>
-                <tr data-date="2025-06-26"
-                    data-person="Butt Fitness"
-                    data-type="i_paid"
-                    data-method="cash"
-                    data-cheque-status="">
-                    <td>2025-06-26</td>
-                    <td>Butt Fitness</td>
-                    <td>Rs. 2,000,000.00</td>
-                    <td>Paid</td>
-                    <td>Cash</td>
-                    <td><span class="status ">-</span></td>
-                    <td>505213</td>
-                    <td><span class="status completed">Completed</span></td>
-                    <td>Meezan Bank</td>
-                </tr>
-                <tr data-date="2025-01-07"
-                    data-person="Butt Fitness"
-                    data-type="i_paid"
-                    data-method="cash"
-                    data-cheque-status="">
-                    <td>2025-01-07</td>
-                    <td>Butt Fitness</td>
-                    <td>Rs. 1,000,000.00</td>
-                    <td>Paid</td>
-                    <td>Cash</td>
-                    <td><span class="status ">-</span></td>
-                    <td>416723</td>
-                    <td><span class="status completed">Completed</span></td>
-                    <td>Meezan Bank</td>
-                </tr>
-                <tr data-date="2025-08-07"
-                    data-person="Butt Fitness"
-                    data-type="i_paid"
-                    data-method="cash"
-                    data-cheque-status="">
-                    <td>2025-08-07</td>
-                    <td>Butt Fitness</td>
-                    <td>Rs. 500,000.00</td>
-                    <td>Paid</td>
-                    <td>Cash</td>
-                    <td><span class="status ">-</span></td>
-                    <td>842448</td>
-                    <td><span class="status completed">Completed</span></td>
-                    <td>Meezan Bank</td>
-                </tr>
-                <tr data-date="2025-09-07"
-                    data-person="Butt Fitness"
-                    data-type="i_paid"
-                    data-method="cash"
-                    data-cheque-status="">
-                    <td>2025-09-07</td>
-                    <td>Butt Fitness</td>
-                    <td>Rs. 400,000.00</td>
-                    <td>Paid</td>
-                    <td>Cash</td>
-                    <td><span class="status ">-</span></td>
-                    <td>#FT251910XXPTDWXQ</td>
-                    <td><span class="status completed">Completed</span></td>
-                    <td>Bank Alfa</td>
-                </tr>
-                <tr data-date="2025-07-25"
-                    data-person="Butt Fitness"
-                    data-type="i_paid"
-                    data-method="cash"
-                    data-cheque-status="">
-                    <td>2025-07-25</td>
-                    <td>Butt Fitness</td>
-                    <td>Rs. 200,000.00</td>
-                    <td>Paid</td>
-                    <td>Cash</td>
-                    <td><span class="status ">-</span></td>
-                    <td>411625</td>
-                    <td><span class="status completed">Completed</span></td>
-                    <td>Meezan Bank</td>
-                </tr>
-                <tr data-date="2025-04-17"
-                    data-person="H.M. Fitness"
-                    data-type="i_paid"
-                    data-method="cash"
-                    data-cheque-status="">
-                    <td>2025-04-17</td>
-                    <td>H.M. Fitness</td>
-                    <td>Rs. 100,000.00</td>
-                    <td>Paid</td>
-                    <td>Cash</td>
-                    <td><span class="status ">-</span></td>
-                    <td>230902</td>
-                    <td><span class="status completed">Completed</span></td>
-                    <td>United Bank Limited</td>
-                </tr>
-                <tr data-date="2025-05-17"
-                    data-person="H.M. Fitness"
-                    data-type="i_paid"
-                    data-method="cash"
-                    data-cheque-status="">
-                    <td>2025-05-17</td>
-                    <td>H.M. Fitness</td>
-                    <td>Rs. 500,000.00</td>
-                    <td>Paid</td>
-                    <td>Cash</td>
-                    <td><span class="status ">-</span></td>
-                    <td>577478</td>
-                    <td><span class="status completed">Completed</span></td>
-                    <td>United Bank Limited</td>
-                </tr>
-                <tr data-date="2025-05-20"
-                    data-person="H.M. Fitness"
-                    data-type="i_paid"
-                    data-method="cash"
-                    data-cheque-status="">
-                    <td>2025-05-20</td>
-                    <td>H.M. Fitness</td>
-                    <td>Rs. 500,000.00</td>
-                    <td>Paid</td>
-                    <td>Cash</td>
-                    <td><span class="status ">-</span></td>
-                    <td>FT2514101NWFDLBP</td>
-                    <td><span class="status completed">Completed</span></td>
-                    <td>Bank Alfa</td>
-                </tr>
-                <tr data-date="2025-05-06"
-                    data-person="H.M. Fitness"
-                    data-type="i_paid"
-                    data-method="cash"
-                    data-cheque-status="">
-                    <td>2025-05-06</td>
-                    <td>H.M. Fitness</td>
-                    <td>Rs. 500,000.00</td>
-                    <td>Paid</td>
-                    <td>Cash</td>
-                    <td><span class="status ">-</span></td>
-                    <td>798625</td>
-                    <td><span class="status completed">Completed</span></td>
-                    <td>United Bank Limited</td>
-                </tr>
-                <tr data-date="2025-05-31"
-                    data-person="H.M. Fitness"
-                    data-type="i_paid"
-                    data-method="cash"
-                    data-cheque-status="">
-                    <td>2025-05-31</td>
-                    <td>H.M. Fitness</td>
-                    <td>Rs. 1,000,000.00</td>
-                    <td>Paid</td>
-                    <td>Cash</td>
-                    <td><span class="status ">-</span></td>
-                    <td>499282</td>
-                    <td><span class="status completed">Completed</span></td>
-                    <td>United Bank Limited</td>
-                </tr>
-                <tr data-date="2025-06-16"
-                    data-person="H.M. Fitness"
-                    data-type="i_paid"
-                    data-method="cash"
-                    data-cheque-status="">
-                    <td>2025-06-16</td>
-                    <td>H.M. Fitness</td>
-                    <td>Rs. 1,000,000.00</td>
-                    <td>Paid</td>
-                    <td>Cash</td>
-                    <td><span class="status ">-</span></td>
-                    <td>373827</td>
-                    <td><span class="status completed">Completed</span></td>
-                    <td>United Bank Limited</td>
-                </tr>
-                <tr data-date="2025-06-21"
-                    data-person="H.M. Fitness"
-                    data-type="i_paid"
-                    data-method="cash"
-                    data-cheque-status="">
-                    <td>2025-06-21</td>
-                    <td>H.M. Fitness</td>
-                    <td>Rs. 532,000.00</td>
-                    <td>Paid</td>
-                    <td>Cash</td>
-                    <td><span class="status ">-</span></td>
-                    <td>509991</td>
-                    <td><span class="status completed">Completed</span></td>
-                    <td>United Bank Limited</td>
-                </tr>
-                <tr data-date="2025-06-25"
-                    data-person="H.M. Fitness"
-                    data-type="i_paid"
-                    data-method="cash"
-                    data-cheque-status="">
-                    <td>2025-06-25</td>
-                    <td>H.M. Fitness</td>
-                    <td>Rs. 500,000.00</td>
-                    <td>Paid</td>
-                    <td>Cash</td>
-                    <td><span class="status ">-</span></td>
-                    <td>425398</td>
-                    <td><span class="status completed">Completed</span></td>
-                    <td>United Bank Limited</td>
-                </tr>
-                <tr data-date="2025-01-07"
-                    data-person="H.M. Fitness"
-                    data-type="i_paid"
-                    data-method="cheque"
-                    data-cheque-status="processing done">
-                    <td>2025-01-07</td>
-                    <td>H.M. Fitness</td>
-                    <td>Rs. 800,000.00</td>
-                    <td>Paid</td>
-                    <td>Cheque</td>
-                    <td><span class="status processing-done">Processing done</span></td>
-                    <td>CA0000000024</td>
-                    <td><span class="status completed">Completed</span></td>
-                    <td>Faysal Bank</td>
-                </tr>
-                <tr data-date="2025-02-07"
-                    data-person="H.M. Fitness"
-                    data-type="i_paid"
-                    data-method="cash"
-                    data-cheque-status="">
-                    <td>2025-02-07</td>
-                    <td>H.M. Fitness</td>
-                    <td>Rs. 700,000.00</td>
-                    <td>Paid</td>
-                    <td>Cash</td>
-                    <td><span class="status ">-</span></td>
-                    <td>52372192</td>
-                    <td><span class="status completed">Completed</span></td>
-                    <td>Bank Alfalah</td>
-                </tr>
-            </tbody>
-        </table>
 
         <div class="footer">
             <p><i class="fas fa-file-alt"></i> This report was automatically generated by Payment Tracker System</p>
-            <p><i class="far fa-copyright"></i> {{datetime.now().year}} All Rights Reserved</p>
+            <p><i class="far fa-copyright"></i> 2025 All Rights Reserved</p>
         </div>
     </div>
 </body>
