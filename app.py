@@ -277,15 +277,31 @@ def generate_html_summary(df):
             total_spent_by_clients = client_expenses_df_all.groupby('expense_person')['expense_amount'].sum().reset_index()
             total_spent_by_clients.rename(columns={'expense_person': 'client_name', 'expense_amount': 'total_spent_by_client'}, inplace=True)
 
-        summary_by_client_df = pd.merge(
-            total_paid_to_clients,
-            total_spent_by_clients,
-            on='client_name',
-            how='outer'
-        ).fillna(0)
-        
-        if 'client_name' in summary_by_client_df.columns:
+        # Initialize with all expected columns to prevent KeyError if merge results in empty DF
+        expected_client_summary_cols = ['client_name', 'total_paid_to_client', 'total_spent_by_client']
+        summary_by_client_df = pd.DataFrame(columns=expected_client_summary_cols)
+
+        if not total_paid_to_clients.empty or not total_spent_by_clients.empty:
+            summary_by_client_df = pd.merge(
+                total_paid_to_clients,
+                total_spent_by_clients,
+                on='client_name',
+                how='outer'
+            )
+            # Ensure all expected columns are present and correctly typed/filled after merge
+            for col in expected_client_summary_cols:
+                if col not in summary_by_client_df.columns:
+                    summary_by_client_df[col] = 0 # Default to 0 for numeric, will be handled for 'client_name' below
+            
             summary_by_client_df['client_name'] = summary_by_client_df['client_name'].astype(str).fillna('')
+            summary_by_client_df['total_paid_to_client'] = pd.to_numeric(summary_by_client_df['total_paid_to_client'], errors='coerce').fillna(0)
+            summary_by_client_df['total_spent_by_client'] = pd.to_numeric(summary_by_client_df['total_spent_by_client'], errors='coerce').fillna(0)
+
+            summary_by_client_df['remaining_balance'] = summary_by_client_df['total_paid_to_client'] - summary_by_client_df['total_spent_by_client']
+        else:
+            # If both source DFs are empty, ensure summary_by_client_df has 'remaining_balance' column too
+            summary_by_client_df = pd.DataFrame(columns=expected_client_summary_cols + ['remaining_balance'])
+
 
         client_overview_html = ""
         if not summary_by_client_df.empty:
@@ -1935,15 +1951,27 @@ with tab3:
             total_spent_by_clients = client_expenses_df_all.groupby('expense_person')['expense_amount'].sum().reset_index()
             total_spent_by_clients.rename(columns={'expense_person': 'client_name', 'expense_amount': 'total_spent_by_client'}, inplace=True)
 
-        summary_by_client_df = pd.merge(
-            total_paid_to_clients,
-            total_spent_by_clients,
-            on='client_name',
-            how='outer'
-        ).fillna(0)
+        expected_client_summary_cols = ['client_name', 'total_paid_to_client', 'total_spent_by_client']
+        summary_by_client_df = pd.DataFrame(columns=expected_client_summary_cols)
 
-        if 'client_name' in summary_by_client_df.columns:
+        if not total_paid_to_clients.empty or not total_spent_by_clients.empty:
+            summary_by_client_df = pd.merge(
+                total_paid_to_clients,
+                total_spent_by_clients,
+                on='client_name',
+                how='outer'
+            )
+            for col in expected_client_summary_cols:
+                if col not in summary_by_client_df.columns:
+                    summary_by_client_df[col] = 0
+            
             summary_by_client_df['client_name'] = summary_by_client_df['client_name'].astype(str).fillna('')
+            summary_by_client_df['total_paid_to_client'] = pd.to_numeric(summary_by_client_df['total_paid_to_client'], errors='coerce').fillna(0)
+            summary_by_client_df['total_spent_by_client'] = pd.to_numeric(summary_by_client_df['total_spent_by_client'], errors='coerce').fillna(0)
+
+            summary_by_client_df['remaining_balance'] = summary_by_client_df['total_paid_to_client'] - summary_by_client_df['total_spent_by_client']
+        else:
+            summary_by_client_df = pd.DataFrame(columns=expected_client_summary_cols + ['remaining_balance'])
 
         if not summary_by_client_df.empty:
             st.write("#### Spending Overview by Client")
