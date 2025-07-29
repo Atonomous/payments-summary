@@ -23,5 +23,5 @@ date,person,amount,type,status,description,payment_method,reference_number,chequ
 ,H.M. Fitness,1000000,i_paid,completed,United Bank Limited,cash,373827,,completed
 ,H.M. Fitness,532000,i_paid,completed,United Bank Limited,cash,509991,,completed
 ,H.M. Fitness,500000,i_paid,completed,United Bank Limited,cash,425398,,completed
-2025-01-07,H.M. Fitness,800000,i_paid,completed,Faysal Bank,cheque,CA0000000024,processing,completed
+2025-01-07,H.M. Fitness,800000,i_paid,completed,Faysal Bank,cheque,CA0000000024,processing done,completed
 2025-02-07,H.M. Fitness,700000,i_paid,completed,Bank Alfalah,cash,52372192,,completed
