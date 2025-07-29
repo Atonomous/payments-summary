@@ -16,7 +16,7 @@ date,person,amount,type,status,description,payment_method,reference_number,chequ
 2025-09-07,Butt Fitness,400000,i_paid,completed,Bank Alfa,cash,#FT251910XXPTDWXQ,,completed
 ,Butt Fitness,200000,i_paid,completed,Meezan Bank,cash,411625,,completed
 2025-04-17,H.M. Fitness,100000,i_paid,completed,United Bank Limited,cash,230902,,completed
-,H.M. Fitness,500000,i_paid,completed,United Bank Limited,cash,577478,,completed
+2025-05-17,H.M. Fitness,500000,i_paid,completed,United Bank Limited,cash,577478,,completed
 ,H.M. Fitness,500000,i_paid,completed,Bank Alfa,cash,#FT2514101NWFDLBP,,completed
 2025-05-06,H.M. Fitness,500000,i_paid,completed,United Bank Limited,cash,798625,,completed
 ,H.M. Fitness,1000000,i_paid,completed,United Bank Limited,cash,499282,,completed
