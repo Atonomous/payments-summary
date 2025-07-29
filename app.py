@@ -11,15 +11,12 @@ def init_state():
     keys = [
         'selected_transaction_type', 'payment_method', 'editing_row_idx', 'selected_person', 'reset_add_form',
         'add_amount', 'add_date', 'add_reference_number', 'add_cheque_status', 'add_status', 'add_description',
-        'temp_edit_data', 'invoice_person_name', 'invoice_type', 'invoice_start_date', 'invoice_end_date',
+        'temp_edit_data', 'invoice_person_name', 'invoice_start_date', 'invoice_end_date', # Simplified invoice state
         'generated_invoice_pdf_path', 'show_download_button',
-        'invoice_selected_transactions_start_date',
-        'invoice_selected_transactions_end_date',
         'view_person_filter',
         'view_reference_number_search',
         'selected_client_for_expense', 'add_client_expense_amount', 'add_client_expense_date',
-        'add_client_expense_category', 'add_client_expense_description', 'reset_client_expense_form',
-        'invoice_transactions_table_selection'
+        'add_client_expense_category', 'add_client_expense_description', 'reset_client_expense_form'
     ]
     defaults = {
         'selected_transaction_type': 'Paid to Me',
@@ -35,13 +32,10 @@ def init_state():
         'add_description': '',
         'temp_edit_data': {},
         'invoice_person_name': "Select...",
-        'invoice_type': 'Invoice for Person (All Transactions)',
         'invoice_start_date': datetime.now().date().replace(day=1),
         'invoice_end_date': datetime.now().date(),
         'generated_invoice_pdf_path': None,
         'show_download_button': False,
-        'invoice_selected_transactions_start_date': None,
-        'invoice_selected_transactions_end_date': None,
         'view_person_filter': "All",
         'view_reference_number_search': "",
         'selected_client_for_expense': "Select...",
@@ -49,8 +43,7 @@ def init_state():
         'add_client_expense_date': None,
         'add_client_expense_category': 'General',
         'add_client_expense_description': '',
-        'reset_client_expense_form': False,
-        'invoice_transactions_table_selection': {'added_rows': [], 'edited_rows': {}, 'deleted_rows': [], 'selected_rows': []}
+        'reset_client_expense_form': False
     }
     for k in keys:
         if k not in st.session_state:
@@ -225,6 +218,7 @@ def prepare_dataframe_for_display(df):
     return df_display
 
 def generate_html_summary(df):
+    print("Attempting to generate HTML summary...")
     try:
         transactions_display = prepare_dataframe_for_display(df)
         df_for_totals = df.copy()
@@ -268,35 +262,34 @@ def generate_html_summary(df):
             client_expenses_df_all['expense_person'] = client_expenses_df_all['expense_person'].astype(str)
             client_expenses_df_all['expense_date'] = pd.to_datetime(client_expenses_df_all['expense_date'], errors='coerce').dt.strftime('%Y-%m-%d').fillna('')
         
-        total_paid_to_clients = df_for_totals[df_for_totals['type'] == 'i_paid'].groupby('person')['amount'].sum().reset_index()
-        total_paid_to_clients.rename(columns={'person': 'client_name', 'amount': 'total_paid_to_client'}, inplace=True)
+        # Initialize with expected columns to prevent KeyError if empty
+        total_paid_to_clients = pd.DataFrame(columns=['client_name', 'total_paid_to_client'])
+        if not df_for_totals[df_for_totals['type'] == 'i_paid'].empty:
+            total_paid_to_clients = df_for_totals[df_for_totals['type'] == 'i_paid'].groupby('person')['amount'].sum().reset_index()
+            total_paid_to_clients.rename(columns={'person': 'client_name', 'amount': 'total_paid_to_client'}, inplace=True)
 
-        total_spent_by_clients = pd.DataFrame()
+        # Initialize with expected columns to prevent KeyError if empty
+        total_spent_by_clients = pd.DataFrame(columns=['client_name', 'total_spent_by_client'])
         if not client_expenses_df_all.empty:
             total_spent_by_clients = client_expenses_df_all.groupby('expense_person')['expense_amount'].sum().reset_index()
             total_spent_by_clients.rename(columns={'expense_person': 'client_name', 'expense_amount': 'total_spent_by_client'}, inplace=True)
 
         expected_client_summary_cols = ['client_name', 'total_paid_to_client', 'total_spent_by_client']
-        summary_by_client_df = pd.DataFrame(columns=expected_client_summary_cols)
-
-        if not total_paid_to_clients.empty or not total_spent_by_clients.empty:
-            summary_by_client_df = pd.merge(
-                total_paid_to_clients,
-                total_spent_by_clients,
-                on='client_name',
-                how='outer'
-            )
-            for col in expected_client_summary_cols:
-                if col not in summary_by_client_df.columns:
-                    summary_by_client_df[col] = 0
-            
-            summary_by_client_df['client_name'] = summary_by_client_df['client_name'].astype(str).fillna('')
-            summary_by_client_df['total_paid_to_client'] = pd.to_numeric(summary_by_client_df['total_paid_to_client'], errors='coerce').fillna(0)
-            summary_by_client_df['total_spent_by_client'] = pd.to_numeric(summary_by_client_df['total_spent_by_client'], errors='coerce').fillna(0)
-
-            summary_by_client_df['remaining_balance'] = summary_by_client_df['total_paid_to_client'] - summary_by_client_df['total_spent_by_client']
-        else:
-            summary_by_client_df = pd.DataFrame(columns=expected_client_summary_cols + ['remaining_balance'])
+        summary_by_client_df = pd.merge(
+            total_paid_to_clients,
+            total_spent_by_clients,
+            on='client_name',
+            how='outer'
+        )
+        # Ensure all expected columns are present after merge and fill NaNs
+        for col in expected_client_summary_cols:
+            if col not in summary_by_client_df.columns:
+                summary_by_client_df[col] = 0
+        summary_by_client_df.fillna(0, inplace=True) # Fill NaNs that might result from outer merge
+        summary_by_client_df['client_name'] = summary_by_client_df['client_name'].astype(str).fillna('')
+        summary_by_client_df['total_paid_to_client'] = pd.to_numeric(summary_by_client_df['total_paid_to_client'], errors='coerce').fillna(0)
+        summary_by_client_df['total_spent_by_client'] = pd.to_numeric(summary_by_client_df['total_spent_by_client'], errors='coerce').fillna(0)
+        summary_by_client_df['remaining_balance'] = summary_by_client_df['total_paid_to_client'] - summary_by_client_df['total_spent_by_client']
 
 
         client_overview_html = ""
@@ -1165,12 +1158,14 @@ def generate_html_summary(df):
         os.makedirs(os.path.dirname(SUMMARY_FILE), exist_ok=True)
         with open(SUMMARY_FILE, "w", encoding="utf-8") as f:
             f.write(html)
+        print(f"HTML summary successfully generated at {SUMMARY_FILE}")
         return True
     except Exception as e:
+        print(f"Error generating HTML summary: {e}")
         st.error(f"Error generating HTML summary: {e}")
         return False
 
-def generate_invoice_pdf(person_name, transactions_df, invoice_type_display, start_date=None, end_date=None):
+def generate_invoice_pdf(person_name, transactions_df, start_date=None, end_date=None): # Removed invoice_type_display
     try:
         class PDF(FPDF):
             def header(self):
@@ -1225,10 +1220,9 @@ def generate_invoice_pdf(person_name, transactions_df, invoice_type_display, sta
         pdf.cell(0, 7, "Invoice For:", ln=True)
         pdf.set_font("Arial", size=10)
         pdf.set_text_color(85, 85, 85)
-        if invoice_type_display == "all_transactions":
-            pdf.cell(0, 7, "All Transactions", ln=True)
-        elif invoice_type_display == "specific_date_range":
-            pdf.cell(0, 7, f"Transactions from {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}", ln=True)
+        
+        # Always use date range for invoice now
+        pdf.cell(0, 7, f"Transactions from {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}", ln=True)
         pdf.ln(10)
 
         pdf.set_fill_color(233, 236, 239)
@@ -1324,14 +1318,10 @@ def generate_invoice_pdf(person_name, transactions_df, invoice_type_display, sta
         current_datetime_str = datetime.now().strftime('%Y%m%d_%H%M%S')
         person_name_clean = person_name.replace(' ', '_').replace('.', '')
 
-        if invoice_type_display == "all_transactions":
-            pdf_filename = f"{person_name_clean}_All_Transactions_Invoice_{current_datetime_str}.pdf"
-        elif invoice_type_display == "specific_date_range":
-            start_date_str_file = start_date.strftime('%Y%m%d')
-            end_date_str_file = end_date.strftime('%Y%m%d')
-            pdf_filename = f"{person_name_clean}_Invoice_{start_date_str_file}_to_{end_date_str_file}_{current_datetime_str}.pdf"
-        else:
-            pdf_filename = f"{person_name_clean}_Invoice_Generated_{current_datetime_str}.pdf"
+        # Simplified filename based on date range
+        start_date_str_file = start_date.strftime('%Y%m%d')
+        end_date_str_file = end_date.strftime('%Y%m%d')
+        pdf_filename = f"{person_name_clean}_Invoice_{start_date_str_file}_to_{end_date_str_file}_{current_datetime_str}.pdf"
 
         pdf_file_path = os.path.join(INVOICE_DIR, pdf_filename)
         pdf.output(pdf_file_path)
@@ -1931,35 +1921,35 @@ with tab3:
             client_expenses_df_all['expense_person'] = client_expenses_df_all['expense_person'].astype(str)
             client_expenses_df_all['expense_date'] = pd.to_datetime(client_expenses_df_all['expense_date'], errors='coerce').dt.strftime('%Y-%m-%d').fillna('')
         
-        total_paid_to_clients = payments_df_all[payments_df_all['type'] == 'i_paid'].groupby('person')['amount'].sum().reset_index()
-        total_paid_to_clients.rename(columns={'person': 'client_name', 'amount': 'total_paid_to_client'}, inplace=True)
+        # Initialize with expected columns to prevent KeyError if empty
+        total_paid_to_clients = pd.DataFrame(columns=['client_name', 'total_paid_to_client'])
+        if not payments_df_all[payments_df_all['type'] == 'i_paid'].empty:
+            total_paid_to_clients = payments_df_all[payments_df_all['type'] == 'i_paid'].groupby('person')['amount'].sum().reset_index()
+            total_paid_to_clients.rename(columns={'person': 'client_name', 'amount': 'total_paid_to_client'}, inplace=True)
 
-        total_spent_by_clients = pd.DataFrame()
+        # Initialize with expected columns to prevent KeyError if empty
+        total_spent_by_clients = pd.DataFrame(columns=['client_name', 'total_spent_by_client'])
         if not client_expenses_df_all.empty:
             total_spent_by_clients = client_expenses_df_all.groupby('expense_person')['expense_amount'].sum().reset_index()
             total_spent_by_clients.rename(columns={'expense_person': 'client_name', 'expense_amount': 'total_spent_by_client'}, inplace=True)
 
         expected_client_summary_cols = ['client_name', 'total_paid_to_client', 'total_spent_by_client']
-        summary_by_client_df = pd.DataFrame(columns=expected_client_summary_cols)
+        summary_by_client_df = pd.merge(
+            total_paid_to_clients,
+            total_spent_by_clients,
+            on='client_name',
+            how='outer'
+        )
+        # Ensure all expected columns are present after merge and fill NaNs
+        for col in expected_client_summary_cols:
+            if col not in summary_by_client_df.columns:
+                summary_by_client_df[col] = 0
+        summary_by_client_df.fillna(0, inplace=True) # Fill NaNs that might result from outer merge
+        summary_by_client_df['client_name'] = summary_by_client_df['client_name'].astype(str).fillna('')
+        summary_by_client_df['total_paid_to_client'] = pd.to_numeric(summary_by_client_df['total_paid_to_client'], errors='coerce').fillna(0)
+        summary_by_client_df['total_spent_by_client'] = pd.to_numeric(summary_by_client_df['total_spent_by_client'], errors='coerce').fillna(0)
+        summary_by_client_df['remaining_balance'] = summary_by_client_df['total_paid_to_client'] - summary_by_client_df['total_spent_by_client']
 
-        if not total_paid_to_clients.empty or not total_spent_by_clients.empty:
-            summary_by_client_df = pd.merge(
-                total_paid_to_clients,
-                total_spent_by_clients,
-                on='client_name',
-                how='outer'
-            )
-            for col in expected_client_summary_cols:
-                if col not in summary_by_client_df.columns:
-                    summary_by_client_df[col] = 0
-            
-            summary_by_client_df['client_name'] = summary_by_client_df['client_name'].astype(str).fillna('')
-            summary_by_client_df['total_paid_to_client'] = pd.to_numeric(summary_by_client_df['total_paid_to_client'], errors='coerce').fillna(0)
-            summary_by_client_df['total_spent_by_client'] = pd.to_numeric(summary_by_client_df['total_spent_by_client'], errors='coerce').fillna(0)
-
-            summary_by_client_df['remaining_balance'] = summary_by_client_df['total_paid_to_client'] - summary_by_client_df['total_spent_by_client']
-        else:
-            summary_by_client_df = pd.DataFrame(columns=expected_client_summary_cols + ['remaining_balance'])
 
         if not summary_by_client_df.empty:
             st.write("#### Spending Overview by Client")
@@ -2065,12 +2055,23 @@ with tab5:
         key='invoice_person_name_select'
     )
 
-    st.session_state['invoice_type'] = st.radio(
-        "Invoice Type",
-        ["Invoice for Person (All Transactions)", "Invoice for Selected Transactions"],
-        key='invoice_type_radio'
-    )
+    # Removed invoice_type radio button
+    st.write("Generate invoice for transactions within a date range.")
 
+    col_start_date, col_end_date = st.columns(2)
+    with col_start_date:
+        st.session_state['invoice_start_date'] = st.date_input(
+            "Start Date",
+            value=st.session_state['invoice_start_date'] if st.session_state['invoice_start_date'] else datetime.now().date().replace(day=1),
+            key='invoice_start_date_select'
+        )
+    with col_end_date:
+        st.session_state['invoice_end_date'] = st.date_input(
+            "End Date",
+            value=st.session_state['invoice_end_date'] if st.session_state['invoice_end_date'] else datetime.now().date(),
+            key='invoice_end_date_select'
+        )
+    
     filtered_invoice_df = pd.DataFrame()
     if st.session_state['invoice_person_name'] != "Select...":
         try:
@@ -2085,33 +2086,18 @@ with tab5:
                 (all_transactions_df['type'] == 'i_paid') # Invoices are typically for payments made to clients
             ].copy()
             
-            if st.session_state['invoice_type'] == "Invoice for Selected Transactions":
-                col_start_date, col_end_date = st.columns(2)
-                with col_start_date:
-                    st.session_state['invoice_selected_transactions_start_date'] = st.date_input(
-                        "Start Date",
-                        value=st.session_state['invoice_selected_transactions_start_date'] if st.session_state['invoice_selected_transactions_start_date'] else datetime.now().date().replace(day=1),
-                        key='invoice_start_date_select'
-                    )
-                with col_end_date:
-                    st.session_state['invoice_selected_transactions_end_date'] = st.date_input(
-                        "End Date",
-                        value=st.session_state['invoice_selected_transactions_end_date'] if st.session_state['invoice_selected_transactions_end_date'] else datetime.now().date(),
-                        key='invoice_end_date_select'
-                    )
-                
-                if st.session_state['invoice_selected_transactions_start_date'] and st.session_state['invoice_selected_transactions_end_date']:
-                    filtered_invoice_df = filtered_invoice_df[
-                        (filtered_invoice_df['date'] >= pd.to_datetime(st.session_state['invoice_selected_transactions_start_date'])) &
-                        (filtered_invoice_df['date'] <= pd.to_datetime(st.session_state['invoice_selected_transactions_end_date']))
-                    ]
+            if st.session_state['invoice_start_date'] and st.session_state['invoice_end_date']:
+                filtered_invoice_df = filtered_invoice_df[
+                    (filtered_invoice_df['date'] >= pd.to_datetime(st.session_state['invoice_start_date'])) &
+                    (filtered_invoice_df['date'] <= pd.to_datetime(st.session_state['invoice_end_date']))
+                ]
             
             if not filtered_invoice_df.empty:
                 filtered_invoice_df_display = prepare_dataframe_for_display(filtered_invoice_df)
                 filtered_invoice_df_display['original_index'] = filtered_invoice_df.index
                 
-                st.write("#### Select Transactions for Invoice")
-                st.session_state['invoice_transactions_table_selection'] = st.data_editor(
+                st.write("#### Transactions for Invoice")
+                st.dataframe(
                     filtered_invoice_df_display[[
                         'original_index', 'formatted_date', 'amount_display', 'type_display', 
                         'payment_method', 'cheque_status_display', 'reference_number_display', 
@@ -2128,23 +2114,10 @@ with tab5:
                         'description': 'Description'
                     }),
                     use_container_width=True,
-                    hide_index=True,
-                    num_rows="dynamic",
-                    column_config={
-                        "ID": st.column_config.Column(disabled=True),
-                        "Date": st.column_config.Column(disabled=True),
-                        "Amount": st.column_config.Column(disabled=True),
-                        "Type": st.column_config.Column(disabled=True),
-                        "Method": st.column_config.Column(disabled=True),
-                        "Cheque Status": st.column_config.Column(disabled=True),
-                        "Reference No.": st.column_config.Column(disabled=True),
-                        "Status": st.column_config.Column(disabled=True),
-                        "Description": st.column_config.Column(disabled=True)
-                    },
-                    key='invoice_transactions_table_selection'
+                    hide_index=True
                 )
             else:
-                st.info("No 'I Paid' transactions found for the selected person and criteria.")
+                st.info("No 'I Paid' transactions found for the selected person and date range.")
 
         except Exception as e:
             st.error(f"Error loading transactions for invoice: {e}")
@@ -2152,41 +2125,22 @@ with tab5:
     if st.button("Generate PDF Invoice"):
         if st.session_state['invoice_person_name'] == "Select...":
             st.warning("Please select a person to generate an invoice.")
-        elif st.session_state['invoice_type'] == "Invoice for Selected Transactions" and not st.session_state['invoice_transactions_table_selection']['selected_rows']:
-            st.warning("Please select at least one transaction for the invoice.")
-        else:
-            transactions_for_invoice = pd.DataFrame()
-            invoice_type_display_text = ""
-            start_date_for_pdf = None
-            end_date_for_pdf = None
-
-            if st.session_state['invoice_type'] == "Invoice for All Transactions":
-                transactions_for_invoice = filtered_invoice_df.copy()
-                invoice_type_display_text = "all_transactions"
-            elif st.session_state['invoice_type'] == "Invoice for Selected Transactions":
-                selected_indices = [row['ID'] for row in st.session_state['invoice_transactions_table_selection']['selected_rows']]
-                transactions_for_invoice = filtered_invoice_df[filtered_invoice_df.index.isin(selected_indices)].copy()
-                invoice_type_display_text = "specific_date_range"
-                start_date_for_pdf = st.session_state['invoice_selected_transactions_start_date']
-                end_date_for_pdf = st.session_state['invoice_selected_transactions_end_date']
-
-            if not transactions_for_invoice.empty:
-                transactions_for_invoice_display = prepare_dataframe_for_display(transactions_for_invoice)
-                pdf_path = generate_invoice_pdf(
-                    st.session_state['invoice_person_name'],
-                    transactions_for_invoice_display,
-                    invoice_type_display_text,
-                    start_date_for_pdf,
-                    end_date_for_pdf
-                )
-                if pdf_path:
-                    st.session_state['generated_invoice_pdf_path'] = pdf_path
-                    st.session_state['show_download_button'] = True
-                    st.success("Invoice generated successfully!")
-                else:
-                    st.error("Failed to generate invoice.")
+        elif not filtered_invoice_df.empty:
+            # Pass the filtered_invoice_df directly
+            pdf_path = generate_invoice_pdf(
+                st.session_state['invoice_person_name'],
+                prepare_dataframe_for_display(filtered_invoice_df), # Pass the prepared df for PDF generation
+                st.session_state['invoice_start_date'],
+                st.session_state['invoice_end_date']
+            )
+            if pdf_path:
+                st.session_state['generated_invoice_pdf_path'] = pdf_path
+                st.session_state['show_download_button'] = True
+                st.success("Invoice generated successfully!")
             else:
-                st.warning("No transactions to include in the invoice based on your selection.")
+                st.error("Failed to generate invoice.")
+        else:
+            st.warning("No transactions to include in the invoice based on your selection and date range.")
 
     if st.session_state['show_download_button'] and st.session_state['generated_invoice_pdf_path']:
         with open(st.session_state['generated_invoice_pdf_path'], "rb") as pdf_file:
@@ -2236,4 +2190,15 @@ try:
         st.sidebar.info("Transaction database not found. Add a transaction to create it.")
 except Exception as e:
     st.sidebar.error(f"Error loading balances: {str(e)}")
+
+# Ensure HTML summary is generated on every run
+try:
+    current_payments_df = pd.read_csv(CSV_FILE, dtype={'reference_number': str}, keep_default_na=False)
+    current_payments_df['reference_number'] = current_payments_df['reference_number'].apply(
+        lambda x: '' if pd.isna(x) or str(x).strip().lower() == 'nan' or str(x).strip().lower() == 'none' else str(x).strip()
+    )
+    current_payments_df = clean_payments_data(current_payments_df)
+    generate_html_summary(current_payments_df)
+except Exception as e:
+    st.error(f"Failed to generate HTML summary on app load: {e}")
 
