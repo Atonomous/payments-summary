@@ -442,7 +442,7 @@
             </div>
             <h1 class="report-title">Payment Summary Report</h1>
             <div class="report-date">
-                <i class="far fa-calendar-alt"></i> July 29, 2025 at 11:23 AM
+                <i class="far fa-calendar-alt"></i> July 29, 2025 at 11:48 AM
             </div>
         </header>
 
@@ -454,11 +454,11 @@
                     </div>
                     <div>
                         <div class="card-title">Total Received</div>
-                        <div class="card-amount">Rs.12,000.00</div>
+                        <div class="card-amount">Rs.0.00</div>
                     </div>
                 </div>
                 <div class="card-details">
-                    <div><i class="fas fa-coins"></i> Cash: Rs.12,000.00</div>
+                    <div><i class="fas fa-coins"></i> Cash: Rs.0.00</div>
                     <div><i class="fas fa-money-check-alt"></i> Cheque: Rs.0.00</div>
                     <div><i class="fas fa-clock"></i> Pending: Rs.0.00</div>
                 </div>
@@ -471,12 +471,12 @@
                     </div>
                     <div>
                         <div class="card-title">Total Paid</div>
-                        <div class="card-amount">Rs.12,000.00</div>
+                        <div class="card-amount">Rs.500,000.00</div>
                     </div>
                 </div>
                 <div class="card-details">
-                    <div><i class="fas fa-coins"></i> Cash: Rs.2,000.00</div>
-                    <div><i class="fas fa-money-check-alt"></i> Cheque: Rs.10,000.00</div>
+                    <div><i class="fas fa-coins"></i> Cash: Rs.500,000.00</div>
+                    <div><i class="fas fa-money-check-alt"></i> Cheque: Rs.0.00</div>
                     <div><i class="fas fa-clock"></i> Pending: Rs.0.00</div>
                 </div>
             </div>
@@ -488,13 +488,13 @@
                     </div>
                     <div>
                         <div class="card-title">Net Balance</div>
-                        <div class="card-amount">Rs.0.00</div>
+                        <div class="card-amount">Rs.-500,000.00</div>
                     </div>
                 </div>
                 <div class="card-details">
                     <div><i class="fas fa-info-circle"></i> Received - Paid</div>
                     <div style="margin-top: 10px;">
-                        <span style="color: #28a745;"><i class="fas fa-check-circle"></i> Positive Balance</span>
+                        <span style="color: #dc3545;"><i class="fas fa-exclamation-circle"></i> Negative Balance</span>
                     </div>
                 </div>
             </div>
@@ -517,7 +517,7 @@
                     <label for="name-filter">Person</label>
                     <select id="name-filter">
                         <option value="">All</option>
-                        <option value="Rizwan">Rizwan</option><option value="Shabbir">Shabbir</option><option value="Zohaib">Zohaib</option>
+                        <option value="Butt Fitness">Butt Fitness</option>
                     </select>
                 </div>
 
@@ -585,110 +585,20 @@
                 </tr>
             </thead>
             <tbody>
-                <tr data-date="2025-07-29"
-                    data-person="Shabbir"
-                    data-type="i_paid"
-                    data-method="cheque"
-                    data-cheque-status="received/given">
-                    <td>2025-07-29</td>
-                    <td>Shabbir</td>
-                    <td>Rs. 3,600.00</td>
-                    <td>Paid</td>
-                    <td>Cheque</td>
-                    <td><span class="status received-given">Received/given</span></td>
-                    <td>1</td>
-                    <td><span class="status completed">Completed</span></td>
-                    <td>FirstAgainBlackBox</td>
-                </tr>
-                <tr data-date="2025-07-29"
-                    data-person="Shabbir"
-                    data-type="i_paid"
-                    data-method="cheque"
-                    data-cheque-status="processing">
-                    <td>2025-07-29</td>
-                    <td>Shabbir</td>
-                    <td>Rs. 3,600.00</td>
-                    <td>Paid</td>
-                    <td>Cheque</td>
-                    <td><span class="status processing">Processing</span></td>
-                    <td>1</td>
-                    <td><span class="status completed">Completed</span></td>
-                    <td>FirstAgainBlackBox</td>
-                </tr>
-                <tr data-date="2025-07-29"
-                    data-person="Rizwan"
-                    data-type="paid_to_me"
-                    data-method="cash"
-                    data-cheque-status="">
-                    <td>2025-07-29</td>
-                    <td>Rizwan</td>
-                    <td>Rs. 7,200.00</td>
-                    <td>Received</td>
-                    <td>Cash</td>
-                    <td><span class="status ">-</span></td>
-                    <td>21014</td>
-                    <td><span class="status completed">Completed</span></td>
-                    <td>NoOneDeletes</td>
-                </tr>
-                <tr data-date="2025-07-29"
-                    data-person="Rizwan"
-                    data-type="paid_to_me"
-                    data-method="cash"
-                    data-cheque-status="">
-                    <td>2025-07-29</td>
-                    <td>Rizwan</td>
-                    <td>Rs. 2,800.00</td>
-                    <td>Received</td>
-                    <td>Cash</td>
-                    <td><span class="status ">-</span></td>
-                    <td>00000000012</td>
-                    <td><span class="status completed">Completed</span></td>
-                    <td>FirstAgain</td>
-                </tr>
-                <tr data-date="2025-07-29"
-                    data-person="Zohaib"
-                    data-type="i_paid"
-                    data-method="cheque"
-                    data-cheque-status="received/given">
-                    <td>2025-07-29</td>
-                    <td>Zohaib</td>
-                    <td>Rs. 2,800.00</td>
-                    <td>Paid</td>
-                    <td>Cheque</td>
-                    <td><span class="status received-given">Received/given</span></td>
-                    <td>75487547213756</td>
-                    <td><span class="status completed">Completed</span></td>
-                    <td>FirstAgain99</td>
-                </tr>
-                <tr data-date="2025-07-29"
-                    data-person="Rizwan"
-                    data-type="paid_to_me"
-                    data-method="cash"
-                    data-cheque-status="">
-                    <td>2025-07-29</td>
-                    <td>Rizwan</td>
-                    <td>Rs. 2,000.00</td>
-                    <td>Received</td>
-                    <td>Cash</td>
-                    <td><span class="status ">-</span></td>
-                    <td>231754874854</td>
-                    <td><span class="status completed">Completed</span></td>
-                    <td>2RupeePeople</td>
-                </tr>
-                <tr data-date="2025-07-29"
-                    data-person="Shabbir"
+                <tr data-date="2025-05-02"
+                    data-person="Butt Fitness"
                     data-type="i_paid"
                     data-method="cash"
                     data-cheque-status="">
-                    <td>2025-07-29</td>
-                    <td>Shabbir</td>
-                    <td>Rs. 2,000.00</td>
+                    <td>2025-05-02</td>
+                    <td>Butt Fitness</td>
+                    <td>Rs. 500,000.00</td>
                     <td>Paid</td>
                     <td>Cash</td>
                     <td><span class="status ">-</span></td>
-                    <td>12002120</td>
+                    <td>764206</td>
                     <td><span class="status completed">Completed</span></td>
-                    <td>Nohing</td>
+                    <td>Meezan Bank</td>
                 </tr>
             </tbody>
         </table>
