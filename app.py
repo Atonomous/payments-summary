@@ -21,7 +21,7 @@ def init_state():
         'generated_invoice_pdf_path', 'show_download_button',
         'invoice_selected_transactions_start_date', # Re-added for initialization
         'invoice_selected_transactions_end_date',   # Re-added for initialization
-        'current_selected_invoice_rows', # New key to store explicit selected rows
+        # 'current_selected_invoice_rows', # REMOVED: No longer needed with direct session state access
         'view_person_filter', # New for View Transactions tab
         'view_reference_number_search' # New for View Transactions tab
     ]
@@ -46,7 +46,7 @@ def init_state():
         'show_download_button': False, # Default to not showing the download button
         'invoice_selected_transactions_start_date': None, # Default for new invoice date filter
         'invoice_selected_transactions_end_date': None, # Default for new invoice date filter
-        'current_selected_invoice_rows': [], # Default to empty list
+        # 'current_selected_invoice_rows': [], # REMOVED: No longer needed
         'view_person_filter': "All", # Default for new person filter
         'view_reference_number_search': "" # Default for new reference number search
     }
@@ -1062,8 +1062,8 @@ def generate_invoice_pdf(person_name, transactions_df, invoice_type_display, sta
             pdf.cell(0, 7, "All Transactions", ln=True)
         elif invoice_type_display == "specific_date_range":
             pdf.cell(0, 7, f"Transactions from {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}", ln=True)
-        else: # "selected_transactions"
-            pdf.cell(0, 7, "Selected Transactions", ln=True)
+        # Removed: else: # "selected_transactions"
+        # Removed:    pdf.cell(0, 7, "Selected Transactions", ln=True)
         pdf.ln(10)
 
         # Transaction Table Header
@@ -1135,9 +1135,9 @@ def generate_invoice_pdf(person_name, transactions_df, invoice_type_display, sta
             start_date_str_file = start_date.strftime('%Y%m%d')
             end_date_str_file = end_date.strftime('%Y%m%d')
             pdf_filename = f"{person_name_clean}_Invoice_{start_date_str_file}_to_{end_date_str_file}_{current_datetime_str}.pdf"
-        else: # "selected_transactions"
-            # For selected transactions, we'll use a generic "Selected" tag
-            pdf_filename = f"{person_name_clean}_Selected_Transactions_Invoice_{current_datetime_str}.pdf"
+        else: # "selected_transactions" (This case should no longer be hit if the option is removed)
+            # Fallback for safety, though it should ideally not be reached
+            pdf_filename = f"{person_name_clean}_Invoice_Generated_{current_datetime_str}.pdf"
         # --- End new filename logic ---
 
         pdf_file_path = os.path.join(INVOICE_DIR, pdf_filename)
@@ -1701,7 +1701,7 @@ with tab4:
 
     st.session_state['invoice_type'] = st.radio(
         "Invoice Type",
-        ["Invoice for Person (All Transactions)", "Invoice for Specific Date Range", "Invoice for Selected Transactions"],
+        ["Invoice for Person (All Transactions)", "Invoice for Specific Date Range"], # Removed "Invoice for Selected Transactions"
         horizontal=True,
         key='invoice_type_radio'
     )
@@ -1724,88 +1724,7 @@ with tab4:
     
     # The actual form for submission
     with st.form("invoice_generation_submit_form"):
-        # Moved inside the form
-        if st.session_state['invoice_type'] == "Invoice for Selected Transactions":
-            st.markdown("---")
-            st.subheader("Select Transactions for Invoice")
-            st.info("Filter by date (optional) and then select individual transactions from the table below.")
-
-            col_sel_date1, col_sel_date2 = st.columns(2)
-            with col_sel_date1:
-                # Set default value for date_input to None if it's not set
-                start_date_value = st.session_state['invoice_selected_transactions_start_date']
-                st.session_state['invoice_selected_transactions_start_date'] = st.date_input(
-                    "Filter Start Date (Optional)",
-                    value=start_date_value,
-                    key='invoice_selected_transactions_start_date_input',
-                )
-            with col_sel_date2:
-                # Set default value for date_input to None if it's not set
-                end_date_value = st.session_state['invoice_selected_transactions_end_date']
-                st.session_state['invoice_selected_transactions_end_date'] = st.date_input(
-                    "Filter End Date (Optional)",
-                    value=end_date_value,
-                    key='invoice_selected_transactions_end_date_input',
-                )
-            
-            # Load all transactions for the selected person
-            all_transactions_for_person = pd.DataFrame()
-            if st.session_state['invoice_person_name'] != "Select a person...":
-                try:
-                    temp_df = pd.read_csv(CSV_FILE, dtype={'reference_number': str}, keep_default_na=False)
-                    temp_df['reference_number'] = temp_df['reference_number'].apply(
-                        lambda x: '' if pd.isna(x) or str(x).strip().lower() == 'nan' or str(x).strip().lower() == 'none' else str(x).strip()
-                    )
-                    temp_df = clean_payments_data(temp_df) # Ensure dates are datetime objects
-                    all_transactions_for_person = temp_df[temp_df['person'] == st.session_state['invoice_person_name']].copy()
-                    # Ensure 'original_index' is added before passing to prepare_dataframe_for_display
-                    all_transactions_for_person['original_index'] = all_transactions_for_person.index
-                    all_transactions_for_person = prepare_dataframe_for_display(all_transactions_for_person) # Prepare for display
-                except Exception as e:
-                    st.error(f"Error loading transactions for selection: {e}")
-                    all_transactions_for_person = pd.DataFrame()
-
-            # Apply date filters to the transactions for selection
-            transactions_to_display_for_selection = all_transactions_for_person.copy()
-            if st.session_state['invoice_selected_transactions_start_date']:
-                transactions_to_display_for_selection = transactions_to_display_for_selection[
-                    transactions_to_display_for_selection['date_parsed'].dt.date >= st.session_state['invoice_selected_transactions_start_date']
-                ]
-            if st.session_state['invoice_selected_transactions_end_date']:
-                transactions_to_display_for_selection = transactions_to_display_for_selection[
-                    transactions_to_display_for_selection['date_parsed'].dt.date <= st.session_state['invoice_selected_transactions_end_date']
-                ]
-
-            if not transactions_to_display_for_selection.empty:
-                st.write("Select transactions to include in the invoice:")
-                # Use st.data_editor for multi-row selection
-                # Ensure 'original_index' is set as the index for data_editor to return correct row IDs
-                transactions_to_display_for_selection_indexed = transactions_to_display_for_selection.set_index('original_index')
-                
-                # Display only relevant columns for selection
-                display_cols_for_selection = ['formatted_date', 'description', 'amount_display', 'type_display', 'payment_method', 'transaction_status_display']
-                
-                # Capture the return value of st.data_editor directly
-                data_editor_result = st.data_editor(
-                    transactions_to_display_for_selection_indexed[display_cols_for_selection],
-                    hide_index=False, # Show original index for clarity if needed, though not directly user-facing
-                    num_rows="dynamic",
-                    use_container_width=True,
-                    key="invoice_transactions_table", # This is the key for the data_editor
-                    column_config={
-                        "formatted_date": st.column_config.TextColumn("Date"),
-                        "description": st.column_config.TextColumn("Description"),
-                        "amount_display": st.column_config.TextColumn("Amount"),
-                        "type_display": st.column_config.TextColumn("Type"),
-                        "payment_method": st.column_config.TextColumn("Method"),
-                        "transaction_status_display": st.column_config.TextColumn("Status"),
-                    },
-                )
-                # Store selected_rows from the direct return value into a specific session state key
-                # This ensures the form submission has access to the most up-to-date selection
-                st.session_state['current_selected_invoice_rows'] = data_editor_result.get('selected_rows', [])
-            else:
-                st.info("No transactions found for the selected person and date range.")
+        # The entire block for "Invoice for Selected Transactions" is removed from here
         
         generate_invoice_button = st.form_submit_button("Generate Invoice")
 
@@ -1816,57 +1735,8 @@ with tab4:
 
             if st.session_state['invoice_person_name'] == "Select a person...":
                 st.warning("Please select a person to generate the invoice.")
-            elif st.session_state['invoice_type'] == "Invoice for Selected Transactions":
-                # Now check the explicitly stored session state variable
-                selected_rows_for_invoice = st.session_state.get('current_selected_invoice_rows', [])
-                
-                if not selected_rows_for_invoice:
-                    st.warning("Please select at least one transaction to generate the invoice.")
-                else:
-                    try:
-                        all_transactions_df = pd.read_csv(CSV_FILE, dtype={'reference_number': str}, keep_default_na=False)
-                        all_transactions_df['reference_number'] = all_transactions_df['reference_number'].apply(
-                            lambda x: '' if pd.isna(x) or str(x).strip().lower() == 'nan' or str(x).strip().lower() == 'none' else str(x).strip()
-                        )
-                        all_transactions_df = clean_payments_data(all_transactions_df) # Ensure data is clean (dates are datetime objects)
-
-                        # Filter by person
-                        person_transactions_df = all_transactions_df[all_transactions_df['person'] == st.session_state['invoice_person_name']].copy()
-                        
-                        # Prepare for display (adds 'type_display', 'amount_display', etc.) - important for PDF content
-                        person_transactions_df['original_index'] = person_transactions_df.index # Add original_index before preparing
-                        person_transactions_df = prepare_dataframe_for_display(person_transactions_df)
-
-                        filtered_invoice_transactions = pd.DataFrame() # Initialize empty DataFrame
-
-                        invoice_type_for_filename = "" # For meaningful filename
-                        # Use selected_rows_for_invoice here
-                        filtered_invoice_transactions = person_transactions_df.loc[selected_rows_for_invoice]
-                        invoice_type_for_filename = "selected_transactions"
-
-
-                        # Generate PDF using FPDF
-                        pdf_file_path = generate_invoice_pdf(
-                            st.session_state['invoice_person_name'],
-                            filtered_invoice_transactions,
-                            invoice_type_for_filename, # Pass for filename logic
-                            st.session_state['invoice_start_date'],
-                            st.session_state['invoice_end_date']
-                        )
-                        
-                        st.session_state['generated_invoice_pdf_path'] = pdf_file_path
-
-                        if pdf_file_path:
-                            st.success(f"Invoice generated successfully for {st.session_state['invoice_person_name']}!")
-                            st.session_state['show_download_button'] = True # Set flag to show download button
-                            git_push() # Push the new invoice file to GitHub
-                            # No rerun here, let the natural Streamlit flow display the button
-                        else:
-                            st.error("Failed to generate PDF invoice.")
-                        
-                    except Exception as e:
-                        st.error(f"Error generating invoice: {e}")
-            else: # For "All Transactions" or "Specific Date Range" types
+            # Removed the 'elif st.session_state['invoice_type'] == "Invoice for Selected Transactions":' block
+            else: # Now this 'else' covers both "All Transactions" and "Specific Date Range"
                 try:
                     all_transactions_df = pd.read_csv(CSV_FILE, dtype={'reference_number': str}, keep_default_na=False)
                     all_transactions_df['reference_number'] = all_transactions_df['reference_number'].apply(
