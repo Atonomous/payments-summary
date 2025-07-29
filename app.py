@@ -11,7 +11,7 @@ def init_state():
     keys = [
         'selected_transaction_type', 'payment_method', 'editing_row_idx', 'selected_person', 'reset_add_form',
         'add_amount', 'add_date', 'add_reference_number', 'add_cheque_status', 'add_status', 'add_description',
-        'temp_edit_data', 'invoice_person_name', 'invoice_start_date', 'invoice_end_date', # Simplified invoice state
+        'temp_edit_data', 'invoice_person_name', 'invoice_type', 'invoice_start_date', 'invoice_end_date', # Re-added invoice_type
         'generated_invoice_pdf_path', 'show_download_button',
         'view_person_filter',
         'view_reference_number_search',
@@ -32,6 +32,7 @@ def init_state():
         'add_description': '',
         'temp_edit_data': {},
         'invoice_person_name': "Select...",
+        'invoice_type': 'Invoice for Person (All Transactions)', # Default invoice type
         'invoice_start_date': datetime.now().date().replace(day=1),
         'invoice_end_date': datetime.now().date(),
         'generated_invoice_pdf_path': None,
@@ -1165,7 +1166,7 @@ def generate_html_summary(df):
         st.error(f"Error generating HTML summary: {e}")
         return False
 
-def generate_invoice_pdf(person_name, transactions_df, start_date=None, end_date=None): # Removed invoice_type_display
+def generate_invoice_pdf(person_name, transactions_df, start_date=None, end_date=None):
     try:
         class PDF(FPDF):
             def header(self):
@@ -1221,7 +1222,7 @@ def generate_invoice_pdf(person_name, transactions_df, start_date=None, end_date
         pdf.set_font("Arial", size=10)
         pdf.set_text_color(85, 85, 85)
         
-        # Always use date range for invoice now
+        # Display date range in invoice
         pdf.cell(0, 7, f"Transactions from {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}", ln=True)
         pdf.ln(10)
 
@@ -1229,14 +1230,15 @@ def generate_invoice_pdf(person_name, transactions_df, start_date=None, end_date
         pdf.set_text_color(73, 80, 87)
         pdf.set_font("Arial", "B", size=8)
         
-        col_widths = [20, 50, 15, 15, 30, 40, 20]
+        # Define column widths for PDF: Date, Ref No., Method, Description, Type, Chq. Status, Amount
+        col_widths = [20, 30, 15, 45, 15, 25, 20] 
 
         pdf.cell(col_widths[0], 10, "Date", 1, 0, 'L', 1)
-        pdf.cell(col_widths[1], 10, "Description", 1, 0, 'L', 1)
-        pdf.cell(col_widths[2], 10, "Type", 1, 0, 'L', 1)
-        pdf.cell(col_widths[3], 10, "Method", 1, 0, 'L', 1) 
-        pdf.cell(col_widths[4], 10, "Chq. Status", 1, 0, 'L', 1) 
-        pdf.cell(col_widths[5], 10, "Ref. No.", 1, 0, 'L', 1) 
+        pdf.cell(col_widths[1], 10, "Ref. No.", 1, 0, 'L', 1)
+        pdf.cell(col_widths[2], 10, "Method", 1, 0, 'L', 1)
+        pdf.cell(col_widths[3], 10, "Description", 1, 0, 'L', 1)
+        pdf.cell(col_widths[4], 10, "Type", 1, 0, 'L', 1)
+        pdf.cell(col_widths[5], 10, "Chq. Status", 1, 0, 'L', 1)
         pdf.cell(col_widths[6], 10, "Amount", 1, 1, 'R', 1)
 
         pdf.set_font("Arial", size=8)
@@ -1258,43 +1260,48 @@ def generate_invoice_pdf(person_name, transactions_df, start_date=None, end_date
 
                 pdf.set_font("Arial", size=8)
                 desc_line_height = pdf.font_size * 1.2
-                desc_num_lines = pdf.get_string_width(description_text) / col_widths[1]
+                # Calculate number of lines for description based on its width and column width
+                desc_num_lines = pdf.get_string_width(description_text) / col_widths[3]
                 desc_height = max(10, desc_num_lines * desc_line_height)
 
                 row_total_height = max(10, desc_height)
 
-                if pdf.get_y() + row_total_height + 55 > pdf.h:
+                # Check if new page is needed before drawing the row
+                if pdf.get_y() + row_total_height + 55 > pdf.h: # 55 is approximate footer/margin space
                     pdf.add_page()
                     pdf.set_fill_color(233, 236, 239)
                     pdf.set_text_color(73, 80, 87)
                     pdf.set_font("Arial", "B", size=8)
                     pdf.cell(col_widths[0], 10, "Date", 1, 0, 'L', 1)
-                    pdf.cell(col_widths[1], 10, "Description", 1, 0, 'L', 1)
-                    pdf.cell(col_widths[2], 10, "Type", 1, 0, 'L', 1)
-                    pdf.cell(col_widths[3], 10, "Method", 1, 0, 'L', 1)
-                    pdf.cell(col_widths[4], 10, "Chq. Status", 1, 0, 'L', 1)
-                    pdf.cell(col_widths[5], 10, "Ref. No.", 1, 0, 'L', 1)
+                    pdf.cell(col_widths[1], 10, "Ref. No.", 1, 0, 'L', 1)
+                    pdf.cell(col_widths[2], 10, "Method", 1, 0, 'L', 1)
+                    pdf.cell(col_widths[3], 10, "Description", 1, 0, 'L', 1)
+                    pdf.cell(col_widths[4], 10, "Type", 1, 0, 'L', 1)
+                    pdf.cell(col_widths[5], 10, "Chq. Status", 1, 0, 'L', 1)
                     pdf.cell(col_widths[6], 10, "Amount", 1, 1, 'R', 1)
                     pdf.set_font("Arial", size=8)
                     pdf.set_text_color(51, 51, 51)
-
+                
                 x_start_row = pdf.get_x()
                 y_start_row = pdf.get_y()
                 
+                # Draw cells for the row
                 pdf.cell(col_widths[0], row_total_height, str(row_data['formatted_date']), 1, 0, 'L', 1)
+                pdf.cell(col_widths[1], row_total_height, reference_number_text, 1, 0, 'L', 1)
+                pdf.cell(col_widths[2], row_total_height, str(row_data['payment_method']).capitalize(), 1, 0, 'L', 1) 
                 
-                pdf.set_xy(x_start_row + col_widths[0], y_start_row)
-                pdf.multi_cell(col_widths[1], desc_line_height, description_text, border=1, align='L', fill=1)
+                # For description, use multi_cell if it's long
+                pdf.set_xy(x_start_row + sum(col_widths[:3]), y_start_row)
+                pdf.multi_cell(col_widths[3], desc_line_height, description_text, border=1, align='L', fill=1)
                 
+                # After multi_cell, reset x and y for subsequent cells in the same row
                 current_y_after_multicell = pdf.get_y()
-                row_total_height = current_y_after_multicell - y_start_row
+                row_total_height = current_y_after_multicell - y_start_row # Recalculate row height based on multi_cell
 
-                pdf.set_xy(x_start_row + col_widths[0] + col_widths[1], y_start_row)
+                pdf.set_xy(x_start_row + sum(col_widths[:4]), y_start_row) # Move x to start of next column
 
-                pdf.cell(col_widths[2], row_total_height, str(row_data['type_display']), 1, 0, 'L', 1)
-                pdf.cell(col_widths[3], row_total_height, str(row_data['payment_method']).capitalize(), 1, 0, 'L', 1) 
-                pdf.cell(col_widths[4], row_total_height, str(row_data['cheque_status_display']), 1, 0, 'L', 1) 
-                pdf.cell(col_widths[5], row_total_height, reference_number_text, 1, 0, 'L', 1)
+                pdf.cell(col_widths[4], row_total_height, str(row_data['type_display']), 1, 0, 'L', 1)
+                pdf.cell(col_widths[5], row_total_height, str(row_data['cheque_status_display']), 1, 0, 'L', 1) 
                 pdf.cell(col_widths[6], row_total_height, f"Rs. {row_data['amount']:,.2f}", 1, 1, 'R', 1)
 
         else:
@@ -1309,6 +1316,7 @@ def generate_invoice_pdf(person_name, transactions_df, start_date=None, end_date
 
         pdf.set_font("Arial", "B", size=14)
         pdf.set_text_color(0, 123, 255)
+        # Adjust total amount cell position based on new column widths
         pdf.cell(sum(col_widths) - col_widths[6], 10, "Total Amount:", 0, 0, 'R')
         pdf.cell(col_widths[6], 10, f"Rs. {total_amount:,.2f}", 0, 1, 'R')
         pdf.ln(20)
@@ -2055,23 +2063,12 @@ with tab5:
         key='invoice_person_name_select'
     )
 
-    # Removed invoice_type radio button
-    st.write("Generate invoice for transactions within a date range.")
+    st.session_state['invoice_type'] = st.radio(
+        "Invoice Type",
+        ["Invoice for Person (All Transactions)", "Invoice for Date Range"],
+        key='invoice_type_radio'
+    )
 
-    col_start_date, col_end_date = st.columns(2)
-    with col_start_date:
-        st.session_state['invoice_start_date'] = st.date_input(
-            "Start Date",
-            value=st.session_state['invoice_start_date'] if st.session_state['invoice_start_date'] else datetime.now().date().replace(day=1),
-            key='invoice_start_date_select'
-        )
-    with col_end_date:
-        st.session_state['invoice_end_date'] = st.date_input(
-            "End Date",
-            value=st.session_state['invoice_end_date'] if st.session_state['invoice_end_date'] else datetime.now().date(),
-            key='invoice_end_date_select'
-        )
-    
     filtered_invoice_df = pd.DataFrame()
     if st.session_state['invoice_person_name'] != "Select...":
         try:
@@ -2086,11 +2083,27 @@ with tab5:
                 (all_transactions_df['type'] == 'i_paid') # Invoices are typically for payments made to clients
             ].copy()
             
-            if st.session_state['invoice_start_date'] and st.session_state['invoice_end_date']:
-                filtered_invoice_df = filtered_invoice_df[
-                    (filtered_invoice_df['date'] >= pd.to_datetime(st.session_state['invoice_start_date'])) &
-                    (filtered_invoice_df['date'] <= pd.to_datetime(st.session_state['invoice_end_date']))
-                ]
+            # Conditionally display date inputs and filter based on invoice type
+            if st.session_state['invoice_type'] == "Invoice for Date Range":
+                col_start_date, col_end_date = st.columns(2)
+                with col_start_date:
+                    st.session_state['invoice_start_date'] = st.date_input(
+                        "Start Date",
+                        value=st.session_state['invoice_start_date'] if st.session_state['invoice_start_date'] else datetime.now().date().replace(day=1),
+                        key='invoice_start_date_select'
+                    )
+                with col_end_date:
+                    st.session_state['invoice_end_date'] = st.date_input(
+                        "End Date",
+                        value=st.session_state['invoice_end_date'] if st.session_state['invoice_end_date'] else datetime.now().date(),
+                        key='invoice_end_date_select'
+                    )
+                
+                if st.session_state['invoice_start_date'] and st.session_state['invoice_end_date']:
+                    filtered_invoice_df = filtered_invoice_df[
+                        (filtered_invoice_df['date'] >= pd.to_datetime(st.session_state['invoice_start_date'])) &
+                        (filtered_invoice_df['date'] <= pd.to_datetime(st.session_state['invoice_end_date']))
+                    ]
             
             if not filtered_invoice_df.empty:
                 filtered_invoice_df_display = prepare_dataframe_for_display(filtered_invoice_df)
@@ -2117,7 +2130,7 @@ with tab5:
                     hide_index=True
                 )
             else:
-                st.info("No 'I Paid' transactions found for the selected person and date range.")
+                st.info("No 'I Paid' transactions found for the selected person and criteria.")
 
         except Exception as e:
             st.error(f"Error loading transactions for invoice: {e}")
