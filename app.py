@@ -11,7 +11,7 @@ def init_state():
     keys = [
         'selected_transaction_type', 'payment_method', 'editing_row_idx', 'selected_person', 'reset_add_form',
         'add_amount', 'add_date', 'add_reference_number', 'add_cheque_status', 'add_status', 'add_description',
-        'temp_edit_data', 'invoice_person_name', 'invoice_type', 'invoice_start_date', 'invoice_end_date', # Re-added invoice_type
+        'temp_edit_data', 'invoice_person_name', 'invoice_type', 'invoice_start_date', 'invoice_end_date',
         'generated_invoice_pdf_path', 'show_download_button',
         'view_person_filter',
         'view_reference_number_search',
@@ -32,7 +32,7 @@ def init_state():
         'add_description': '',
         'temp_edit_data': {},
         'invoice_person_name': "Select...",
-        'invoice_type': 'Invoice for Person (All Transactions)', # Default invoice type
+        'invoice_type': 'Invoice for Person (All Transactions)',
         'invoice_start_date': datetime.now().date().replace(day=1),
         'invoice_end_date': datetime.now().date(),
         'generated_invoice_pdf_path': None,
@@ -57,7 +57,7 @@ CSV_FILE = os.path.join(REPO_PATH, "payments.csv")
 PEOPLE_FILE = os.path.join(REPO_PATH, "people.csv")
 CLIENT_EXPENSES_FILE = os.path.join(REPO_PATH, "client_expenses.csv")
 SUMMARY_FILE = os.path.join(REPO_PATH, "docs/index.html")
-SUMMARY_URL = "https://atonomous.github.io/payments-invoice-generator/"
+SUMMARY_URL = "https://atonomous.github.io/payments-summary/"
 INVOICE_DIR = os.path.join(REPO_PATH, "docs", "invoices")
 
 valid_cheque_statuses_lower = ["received/given", "processing", "bounced", "processing done"]
@@ -197,8 +197,10 @@ def prepare_dataframe_for_display(df):
 
     df_display['amount'] = pd.to_numeric(df_display['amount'], errors='coerce').fillna(0.0)
     df_display['amount_display'] = df_display['amount'].apply(lambda x: f"Rs. {x:,.2f}")
-    df_display['date_parsed'] = df['date'].copy()
-    df_display['formatted_date'] = df_display['date_parsed'].dt.strftime('%Y-%m-%d').fillna('')
+    
+    df_display['date_parsed'] = pd.to_datetime(df['date'], errors='coerce')
+    df_display['formatted_date'] = df_display['date_parsed'].dt.strftime('%Y-%m-%d').fillna('-') # Changed fillna('') to fillna('-')
+    
     df_display['cheque_status_cleaned'] = df_display.apply(
         lambda row: None if row['payment_method'].lower() == 'cash' else (
             str(row['cheque_status']) if pd.notna(row['cheque_status']) else None
@@ -216,6 +218,12 @@ def prepare_dataframe_for_display(df):
         axis=1
     )
     df_display['type_display'] = df_display['type'].map({'paid_to_me': 'Received', 'i_paid': 'Paid'}).fillna('')
+    
+    # Ensure payment_method is also explicitly handled for display
+    df_display['payment_method_display'] = df_display['payment_method'].apply(
+        lambda x: str(x).capitalize() if str(x).strip() != '' else '-'
+    )
+
     return df_display
 
 def generate_html_summary(df):
@@ -1223,7 +1231,10 @@ def generate_invoice_pdf(person_name, transactions_df, start_date=None, end_date
         pdf.set_text_color(85, 85, 85)
         
         # Display date range in invoice
-        pdf.cell(0, 7, f"Transactions from {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}", ln=True)
+        if start_date and end_date:
+            pdf.cell(0, 7, f"Transactions from {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}", ln=True)
+        else:
+            pdf.cell(0, 7, "All Transactions", ln=True)
         pdf.ln(10)
 
         pdf.set_fill_color(233, 236, 239)
@@ -1231,7 +1242,8 @@ def generate_invoice_pdf(person_name, transactions_df, start_date=None, end_date
         pdf.set_font("Arial", "B", size=8)
         
         # Define column widths for PDF: Date, Ref No., Method, Description, Type, Chq. Status, Amount
-        col_widths = [20, 30, 15, 45, 15, 25, 20] 
+        # Adjusted widths for better fit
+        col_widths = [20, 30, 20, 45, 15, 25, 35] 
 
         pdf.cell(col_widths[0], 10, "Date", 1, 0, 'L', 1)
         pdf.cell(col_widths[1], 10, "Ref. No.", 1, 0, 'L', 1)
@@ -1255,20 +1267,22 @@ def generate_invoice_pdf(person_name, transactions_df, start_date=None, end_date
                 else:
                     pdf.set_fill_color(255, 255, 255)
 
-                description_text = str(row_data['description'] if row_data['description'] else '-')
+                # Get data for the row, ensuring they are strings and use display columns
+                formatted_date = str(row_data['formatted_date'])
                 reference_number_text = str(row_data['reference_number_display'])
+                payment_method_display = str(row_data['payment_method_display']) # Use the new display column
+                description_text = str(row_data['description'] if row_data['description'] else '-')
+                type_display = str(row_data['type_display'])
+                cheque_status_display = str(row_data['cheque_status_display'])
+                amount_display = f"Rs. {row_data['amount']:,.2f}"
 
-                pdf.set_font("Arial", size=8)
-                desc_line_height = pdf.font_size * 1.2
-                # Calculate number of lines for description based on its width and column width
-                desc_num_lines = pdf.get_string_width(description_text) / col_widths[3]
-                desc_height = max(10, desc_num_lines * desc_line_height)
+                # All cells in a row will have the same height for consistent table structure
+                row_height = 10 
 
-                row_total_height = max(10, desc_height)
-
-                # Check if new page is needed before drawing the row
-                if pdf.get_y() + row_total_height + 55 > pdf.h: # 55 is approximate footer/margin space
+                # Check for page break BEFORE drawing the row
+                if pdf.get_y() + row_height + 55 > pdf.h:
                     pdf.add_page()
+                    # Redraw headers
                     pdf.set_fill_color(233, 236, 239)
                     pdf.set_text_color(73, 80, 87)
                     pdf.set_font("Arial", "B", size=8)
@@ -1281,28 +1295,15 @@ def generate_invoice_pdf(person_name, transactions_df, start_date=None, end_date
                     pdf.cell(col_widths[6], 10, "Amount", 1, 1, 'R', 1)
                     pdf.set_font("Arial", size=8)
                     pdf.set_text_color(51, 51, 51)
-                
-                x_start_row = pdf.get_x()
-                y_start_row = pdf.get_y()
-                
-                # Draw cells for the row
-                pdf.cell(col_widths[0], row_total_height, str(row_data['formatted_date']), 1, 0, 'L', 1)
-                pdf.cell(col_widths[1], row_total_height, reference_number_text, 1, 0, 'L', 1)
-                pdf.cell(col_widths[2], row_total_height, str(row_data['payment_method']).capitalize(), 1, 0, 'L', 1) 
-                
-                # For description, use multi_cell if it's long
-                pdf.set_xy(x_start_row + sum(col_widths[:3]), y_start_row)
-                pdf.multi_cell(col_widths[3], desc_line_height, description_text, border=1, align='L', fill=1)
-                
-                # After multi_cell, reset x and y for subsequent cells in the same row
-                current_y_after_multicell = pdf.get_y()
-                row_total_height = current_y_after_multicell - y_start_row # Recalculate row height based on multi_cell
 
-                pdf.set_xy(x_start_row + sum(col_widths[:4]), y_start_row) # Move x to start of next column
-
-                pdf.cell(col_widths[4], row_total_height, str(row_data['type_display']), 1, 0, 'L', 1)
-                pdf.cell(col_widths[5], row_total_height, str(row_data['cheque_status_display']), 1, 0, 'L', 1) 
-                pdf.cell(col_widths[6], row_total_height, f"Rs. {row_data['amount']:,.2f}", 1, 1, 'R', 1)
+                # Draw cells for the row using standard cell method for consistent alignment
+                pdf.cell(col_widths[0], row_height, formatted_date, 1, 0, 'L', 1)
+                pdf.cell(col_widths[1], row_height, reference_number_text, 1, 0, 'L', 1)
+                pdf.cell(col_widths[2], row_height, payment_method_display, 1, 0, 'L', 1)
+                pdf.cell(col_widths[3], row_height, description_text, 1, 0, 'L', 1) # Using cell, will truncate if too long
+                pdf.cell(col_widths[4], row_height, type_display, 1, 0, 'L', 1)
+                pdf.cell(col_widths[5], row_height, cheque_status_display, 1, 0, 'L', 1)
+                pdf.cell(col_widths[6], row_height, amount_display, 1, 1, 'R', 1) # 1,1 for border and new line
 
         else:
             pdf.set_fill_color(255, 255, 255)
@@ -1316,9 +1317,21 @@ def generate_invoice_pdf(person_name, transactions_df, start_date=None, end_date
 
         pdf.set_font("Arial", "B", size=14)
         pdf.set_text_color(0, 123, 255)
-        # Adjust total amount cell position based on new column widths
-        pdf.cell(sum(col_widths) - col_widths[6], 10, "Total Amount:", 0, 0, 'R')
-        pdf.cell(col_widths[6], 10, f"Rs. {total_amount:,.2f}", 0, 1, 'R')
+        
+        # Calculate the X position for "Total Amount:" to be aligned with the start of the "Description" column
+        # and the amount to be right-aligned with the end of the "Amount" column.
+        # This will make them appear on the same line.
+        
+        # Current X position after the table is at the left margin.
+        # We want to move it to the starting X of the "Description" column.
+        x_start_description_col = pdf.l_margin + col_widths[0] + col_widths[1] + col_widths[2]
+        pdf.set_x(x_start_description_col)
+
+        # Print "Total Amount:" label, no newline (ln=0)
+        pdf.cell(col_widths[3], 10, "Total Amount:", 0, 0, 'R') # Right align label within its cell, using Description column width for spacing
+
+        # Print the total amount, right-aligned, and then move to the next line (ln=1)
+        pdf.cell(col_widths[4] + col_widths[5] + col_widths[6], 10, f"Rs. {total_amount:,.2f}", 0, 1, 'R')
         pdf.ln(20)
 
         os.makedirs(INVOICE_DIR, exist_ok=True)
@@ -1327,8 +1340,8 @@ def generate_invoice_pdf(person_name, transactions_df, start_date=None, end_date
         person_name_clean = person_name.replace(' ', '_').replace('.', '')
 
         # Simplified filename based on date range
-        start_date_str_file = start_date.strftime('%Y%m%d')
-        end_date_str_file = end_date.strftime('%Y%m%d')
+        start_date_str_file = start_date.strftime('%Y%m%d') if start_date else "All"
+        end_date_str_file = end_date.strftime('%Y%m%d') if end_date else "Transactions"
         pdf_filename = f"{person_name_clean}_Invoice_{start_date_str_file}_to_{end_date_str_file}_{current_datetime_str}.pdf"
 
         pdf_file_path = os.path.join(INVOICE_DIR, pdf_filename)
@@ -2113,14 +2126,14 @@ with tab5:
                 st.dataframe(
                     filtered_invoice_df_display[[
                         'original_index', 'formatted_date', 'amount_display', 'type_display', 
-                        'payment_method', 'cheque_status_display', 'reference_number_display', 
+                        'payment_method_display', 'cheque_status_display', 'reference_number_display', 
                         'transaction_status_display', 'description'
                     ]].rename(columns={
                         'original_index': 'ID',
                         'formatted_date': 'Date',
                         'amount_display': 'Amount',
                         'type_display': 'Type',
-                        'payment_method': 'Method',
+                        'payment_method_display': 'Method', # Use the new display column
                         'cheque_status_display': 'Cheque Status',
                         'reference_number_display': 'Reference No.',
                         'transaction_status_display': 'Status',
@@ -2143,8 +2156,8 @@ with tab5:
             pdf_path = generate_invoice_pdf(
                 st.session_state['invoice_person_name'],
                 prepare_dataframe_for_display(filtered_invoice_df), # Pass the prepared df for PDF generation
-                st.session_state['invoice_start_date'],
-                st.session_state['invoice_end_date']
+                st.session_state['invoice_start_date'] if st.session_state['invoice_type'] == "Invoice for Date Range" else None,
+                st.session_state['invoice_end_date'] if st.session_state['invoice_type'] == "Invoice for Date Range" else None
             )
             if pdf_path:
                 st.session_state['generated_invoice_pdf_path'] = pdf_path
