@@ -21,3 +21,4 @@ date,person,amount,type,status,description,payment_method,reference_number,chequ
 2025-06-05,H.M. Fitness,500000.0,i_paid,completed,United Bank Limited,cash,798625,,completed
 2025-05-31,H.M. Fitness,1000000.0,i_paid,completed,United Bank Limited,cash,499282,,completed
 2025-06-16,H.M. Fitness,1000000.0,i_paid,completed,United Bank Limited,cash,373827,,completed
+2025-06-21,H.M. Fitness,532000.0,i_paid,completed,United Bank Limited,cash,509991,,completed
