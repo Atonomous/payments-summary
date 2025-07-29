@@ -3,27 +3,22 @@ import pandas as pd
 from datetime import datetime
 import os
 from git import Repo
-import numpy as np # Import numpy for nan check
-import uuid # For generating unique invoice IDs
-from fpdf import FPDF # Import FPDF
+import numpy as np
+import uuid
+from fpdf import FPDF
 
-# Session State Initialization - MUST BE AT THE VERY TOP
 def init_state():
-    """
-    Initializes all necessary session state variables with default values.
-    This function is called at the very beginning of the script to ensure
-    all keys are present before widgets attempt to access them.
-    """
     keys = [
         'selected_transaction_type', 'payment_method', 'editing_row_idx', 'selected_person', 'reset_add_form',
         'add_amount', 'add_date', 'add_reference_number', 'add_cheque_status', 'add_status', 'add_description',
         'temp_edit_data', 'invoice_person_name', 'invoice_type', 'invoice_start_date', 'invoice_end_date',
         'generated_invoice_pdf_path', 'show_download_button',
-        'invoice_selected_transactions_start_date', # Re-added for initialization
-        'invoice_selected_transactions_end_date',   # Re-added for initialization
-        # 'current_selected_invoice_rows', # REMOVED: No longer needed with direct session state access
-        'view_person_filter', # New for View Transactions tab
-        'view_reference_number_search' # New for View Transactions tab
+        'invoice_selected_transactions_start_date',
+        'invoice_selected_transactions_end_date',
+        'view_person_filter',
+        'view_reference_number_search',
+        'selected_client_for_expense', 'add_client_expense_amount', 'add_client_expense_date',
+        'add_client_expense_category', 'add_client_expense_description', 'reset_client_expense_form'
     ]
     defaults = {
         'selected_transaction_type': 'Paid to Me',
@@ -37,117 +32,90 @@ def init_state():
         'add_cheque_status': 'received/given',
         'add_status': 'completed',
         'add_description': '',
-        'temp_edit_data': {}, # Initialize as empty dict
+        'temp_edit_data': {},
         'invoice_person_name': "Select...",
-        'invoice_type': 'Invoice for Person (All Transactions)', # Default to first option
-        'invoice_start_date': datetime.now().date().replace(day=1), # Default to start of current month
-        'invoice_end_date': datetime.now().date(), # Default to today
-        'generated_invoice_pdf_path': None, # New default for PDF path
-        'show_download_button': False, # Default to not showing the download button
-        'invoice_selected_transactions_start_date': None, # Default for new invoice date filter
-        'invoice_selected_transactions_end_date': None, # Default for new invoice date filter
-        # 'current_selected_invoice_rows': [], # REMOVED: No longer needed
-        'view_person_filter': "All", # Default for new person filter
-        'view_reference_number_search': "" # Default for new reference number search
+        'invoice_type': 'Invoice for Person (All Transactions)',
+        'invoice_start_date': datetime.now().date().replace(day=1),
+        'invoice_end_date': datetime.now().date(),
+        'generated_invoice_pdf_path': None,
+        'show_download_button': False,
+        'invoice_selected_transactions_start_date': None,
+        'invoice_selected_transactions_end_date': None,
+        'view_person_filter': "All",
+        'view_reference_number_search': "",
+        'selected_client_for_expense': "Select...",
+        'add_client_expense_amount': None,
+        'add_client_expense_date': None,
+        'add_client_expense_category': 'General',
+        'add_client_expense_description': '',
+        'reset_client_expense_form': False
     }
     for k in keys:
         if k not in st.session_state:
             st.session_state[k] = defaults[k]
 
-# Initialize the specific key for data_editor if it's not already set by the widget
-# This prevents a KeyError if the widget hasn't rendered yet on first run
 if 'invoice_transactions_table' not in st.session_state:
     st.session_state['invoice_transactions_table'] = {'added_rows': [], 'edited_rows': {}, 'deleted_rows': [], 'selected_rows': []}
 
-init_state() # Call init_state here, before any st. commands that might trigger a rerun or widget creation.
+init_state()
 
-
-# Configuration (kept here as they are global constants)
 REPO_PATH = os.getcwd()
 CSV_FILE = os.path.join(REPO_PATH, "payments.csv")
 PEOPLE_FILE = os.path.join(REPO_PATH, "people.csv")
+CLIENT_EXPENSES_FILE = os.path.join(REPO_PATH, "client_expenses.csv")
 SUMMARY_FILE = os.path.join(REPO_PATH, "docs/index.html")
-# UPDATED: Changed SUMMARY_URL to the new GitHub repository
-SUMMARY_URL = "https://github.com/Atonomous/payments-invoice-generator"
-INVOICE_DIR = os.path.join(REPO_PATH, "docs", "invoices") # New directory for invoices
+SUMMARY_URL = "https://atonomous.github.io/payments-invoice-generator/"
+INVOICE_DIR = os.path.join(REPO_PATH, "docs", "invoices")
 
-# Define valid status lists globally so they are accessible everywhere
 valid_cheque_statuses_lower = ["received/given", "processing", "bounced", "processing done"]
 valid_transaction_statuses_lower = ["completed", "pending"]
+valid_expense_categories = ["General", "Salaries", "Rent", "Utilities", "Supplies", "Travel", "Other"]
 
 def clean_payments_data(df):
-    """
-    Cleans and normalizes the payments DataFrame to ensure data consistency.
-    This function modifies the DataFrame in memory.
-    It handles common data entry errors and type mismatches.
-    """
     if df.empty:
         return df
 
-    # Ensure all relevant columns exist and are strings, replacing NaN/None
     cols_to_check = ["payment_method", "cheque_status", "transaction_status", "reference_number", "date", "amount", "person", "type", "status", "description"]
     for col in cols_to_check:
         if col not in df.columns:
-            df[col] = '' # Add missing column with empty string default
-        # Ensure these columns are always strings and strip whitespace
+            df[col] = ''
         df[col] = df[col].astype(str).replace('nan', '').replace('None', '').str.strip()
 
-    # Convert amount to numeric, coercing errors to NaN, then fill with 0.0
     df['amount'] = pd.to_numeric(df['amount'], errors='coerce').fillna(0.0)
-
-    # --- Robust Date Conversion ---
-    # Convert date to datetime objects, coercing errors to NaT (Not a Time)
     df['date'] = pd.to_datetime(df['date'], errors='coerce')
-    # For saving back to CSV, NaT values will be handled by pandas (usually empty string or NaN)
-    # For display, we will format it later, handling NaT gracefully.
 
-    # Rule 1: If payment_method is 'cash', cheque_status must be empty
     cash_payments_mask = df['payment_method'].str.lower() == 'cash'
-    df.loc[cash_payments_mask, 'cheque_status'] = '' # Set to empty string for cash payments
+    df.loc[cash_payments_mask, 'cheque_status'] = ''
 
-    # Iterate through rows to apply more complex cleaning rules
     for index, row in df.iterrows():
         ref_num_lower = str(row['reference_number']).lower()
         trans_status_current_lower = str(row['transaction_status']).lower()
         cheque_status_current_lower = str(row['cheque_status']).lower()
         payment_method_lower = str(row['payment_method']).lower()
 
-        # Prioritize moving valid statuses from reference_number if applicable
-        # This ensures that if a status was mistakenly put in reference_number, it gets moved.
         if ref_num_lower in valid_transaction_statuses_lower:
             if trans_status_current_lower not in valid_transaction_statuses_lower:
                 df.loc[index, 'transaction_status'] = ref_num_lower
-            df.loc[index, 'reference_number'] = '' # Clear reference_number after moving
+            df.loc[index, 'reference_number'] = ''
         elif ref_num_lower in valid_cheque_statuses_lower and payment_method_lower == 'cheque':
             if cheque_status_current_lower not in valid_cheque_statuses_lower:
                 df.loc[index, 'cheque_status'] = ref_num_lower
-            df.loc[index, 'reference_number'] = '' # Clear reference_number after moving
+            df.loc[index, 'reference_number'] = ''
 
-        # Rule 3: Ensure transaction_status is valid, default to 'completed' if invalid/empty
         if df.loc[index, 'transaction_status'].lower() not in valid_transaction_statuses_lower:
-            df.loc[index, 'transaction_status'] = 'completed' # Default to completed
+            df.loc[index, 'transaction_status'] = 'completed'
 
-        # Rule 4: Ensure cheque_status is valid for cheque payments, default to 'processing' if invalid/empty
         if payment_method_lower == 'cheque':
             if df.loc[index, 'cheque_status'].lower() not in valid_cheque_statuses_lower:
-                df.loc[index, 'cheque_status'] = 'processing' # Default to 'processing' for invalid cheque status
-        else: # For cash payments, ensure cheque_status is empty
+                df.loc[index, 'cheque_status'] = 'processing'
+        else:
             df.loc[index, 'cheque_status'] = ''
 
-    # Removed the aggressive row deletion based on date, person, amount being empty/zero.
-    # This was likely the cause of "deleted dates". We now rely on NaT handling for invalid dates.
-
+    df = df[~((df['date'].isna()) & (df['person'] == '') & (df['amount'] == 0.0))]
     return df
 
-
 def init_files():
-    """
-    Initializes payments.csv and people.csv if they don't exist.
-    Also handles migration of old column names and ensures 'category' in people.csv.
-    Crucially, it now cleans the payments data upon load.
-    """
     try:
-        # Initialize payments.csv if it doesn't exist
         if not os.path.exists(CSV_FILE):
             pd.DataFrame(columns=[
                 "date", "person", "amount", "type", "status",
@@ -156,17 +124,10 @@ def init_files():
             ]).to_csv(CSV_FILE, index=False)
             st.toast(f"Created new {CSV_FILE}")
         else:
-            # CRITICAL FIX: Force reference_number to be read as string and handle NA values aggressively
-            # This is key to preventing Pandas from inferring it as a number or float
-            # Read 'date' as object/string first to allow clean_payments_data to parse it robustly
             df = pd.read_csv(CSV_FILE, dtype={'reference_number': str}, keep_default_na=False)
-            
-            # Ensure any 'nan' strings or actual np.nan values are converted to empty strings immediately
             df['reference_number'] = df['reference_number'].apply(
                 lambda x: '' if pd.isna(x) or str(x).strip().lower() == 'nan' or str(x).strip().lower() == 'none' else str(x).strip()
             )
-
-            # Handle migration from old format to new format if needed
             if 'receipt_number' in df.columns or 'cheque_number' in df.columns:
                 df['reference_number'] = df.apply(
                     lambda row: row['receipt_number'] if row['payment_method'] == 'cash'
@@ -175,48 +136,54 @@ def init_files():
                 ).fillna('')
                 df = df.drop(columns=['receipt_number', 'cheque_number'], errors='ignore')
                 st.toast("Migrated old reference number columns.")
-            
-            # CRITICAL: Clean data on load and save back
             df = clean_payments_data(df)
-            df.to_csv(CSV_FILE, index=False) # Save the cleaned data back to CSV
+            df.to_csv(CSV_FILE, index=False)
             st.toast("Payments data cleaned and saved.")
 
-        # Initialize people.csv if it doesn't exist
         if not os.path.exists(PEOPLE_FILE):
             pd.DataFrame(columns=["name", "category"]).to_csv(PEOPLE_FILE, index=False)
             st.toast(f"Created new {PEOPLE_FILE}")
         else:
             df = pd.read_csv(PEOPLE_FILE)
             if 'category' not in df.columns:
-                df['category'] = 'client' # Default category
+                df['category'] = 'client'
                 df.to_csv(PEOPLE_FILE, index=False)
-            df['name'] = df['name'].astype(str) # Ensure name is string
-            df.to_csv(PEOPLE_FILE, index=False) # Save back
+            df['name'] = df['name'].astype(str)
+            df.to_csv(PEOPLE_FILE, index=False)
+
+        if not os.path.exists(CLIENT_EXPENSES_FILE):
+            pd.DataFrame(columns=[
+                "original_transaction_ref_num", "expense_date", "expense_person",
+                "expense_category", "expense_amount", "expense_description"
+            ]).to_csv(CLIENT_EXPENSES_FILE, index=False)
+            st.toast(f"Created new {CLIENT_EXPENSES_FILE}")
+        else:
+            df_exp = pd.read_csv(CLIENT_EXPENSES_FILE, dtype={'original_transaction_ref_num': str, 'expense_person': str}, keep_default_na=False)
+            for col in ["original_transaction_ref_num", "expense_person", "expense_category", "expense_description"]:
+                if col in df_exp.columns:
+                    df_exp[col] = df_exp[col].astype(str).replace('nan', '').replace('None', '').str.strip()
+            if 'expense_amount' in df_exp.columns:
+                df_exp['expense_amount'] = pd.to_numeric(df_exp['expense_amount'], errors='coerce').fillna(0.0)
+            if 'expense_date' in df_exp.columns:
+                df_exp['expense_date'] = pd.to_datetime(df_exp['expense_date'], errors='coerce').dt.strftime('%Y-%m-%d').fillna('')
+            df_exp.to_csv(CLIENT_EXPENSES_FILE, index=False)
+            st.toast("Client expenses data cleaned and saved.")
+
     except Exception as e:
         st.error(f"Error initializing files: {e}")
 
-# Call init_files at the start of the script to ensure files are ready
 init_files()
 
 def git_push():
-    """
-    Performs a Git add, commit, and push operation.
-    """
     try:
         repo = Repo(REPO_PATH)
-        
-        # Check for uncommitted changes before adding
         if repo.is_dirty(untracked_files=True):
-            repo.git.add(update=True) # Add all modified files
-            repo.git.add(all=True) # Also add untracked files (like new HTML if created)
-        
-        # Only commit if there are changes in the index
+            repo.git.add(update=True)
+            repo.git.add(all=True)
         if repo.index.diff("HEAD"):
-            # Updated commit message as per user request
-            repo.index.commit("Automated update: payments-invoice-generator")
+            repo.index.commit("Automated update: payment records")
         else:
-            return True # No changes, so nothing to push, consider it successful
-
+            return True
         origin = repo.remote(name='origin')
         origin.push()
         st.success("GitHub updated successfully!")
@@ -228,33 +195,17 @@ def git_push():
         return False
 
 def prepare_dataframe_for_display(df):
-    """
-    Performs final preparation for displaying the DataFrame, including formatting.
-    This function creates new columns for display purposes without altering
-    the original DataFrame's data. It's designed to be robust against
-    inconsistent data entries in the CSV.
-    """
     df_display = df.copy()
-
-    # Ensure columns are strings and handle common NaN/None representations
     for col in ['reference_number', 'cheque_status', 'transaction_status', 'payment_method', 'description', 'person', 'type', 'status']:
         if col in df_display.columns:
             df_display[col] = df_display[col].astype(str).replace('nan', '').replace('None', '').str.strip()
         else:
-            df_display[col] = '' # Add missing column if it doesn't exist
+            df_display[col] = ''
 
-    # Convert amount to float and handle missing values for calculations
     df_display['amount'] = pd.to_numeric(df_display['amount'], errors='coerce').fillna(0.0)
     df_display['amount_display'] = df_display['amount'].apply(lambda x: f"Rs. {x:,.2f}")
-
-    # Robust Date Formatting:
-    # Ensure 'date' column is datetime objects (already done by clean_payments_data)
-    # Convert to YYYY-MM-DD string for display, handling NaT values
-    df_display['formatted_date'] = df_display['date'].dt.strftime('%Y-%m-%d').fillna('')
-    # Keep the original datetime objects for filtering if needed
-    df_display['date_parsed'] = df_display['date']
-
-    # Robust Cheque Status Display:
+    df_display['date_parsed'] = df['date'].copy()
+    df_display['formatted_date'] = df_display['date_parsed'].dt.strftime('%Y-%m-%d').fillna('')
     df_display['cheque_status_cleaned'] = df_display.apply(
         lambda row: None if row['payment_method'].lower() == 'cash' else (
             str(row['cheque_status']) if pd.notna(row['cheque_status']) else None
@@ -263,35 +214,20 @@ def prepare_dataframe_for_display(df):
     df_display['cheque_status_display'] = df_display['cheque_status_cleaned'].apply(
         lambda x: next((s.capitalize() for s in valid_cheque_statuses_lower if x is not None and str(x).lower() == s), '-')
     )
-
-    # Robust Transaction Status Display:
     df_display['transaction_status_display'] = df_display.apply(
         lambda row: str(row['transaction_status']).capitalize() if str(row['transaction_status']).lower() in valid_transaction_statuses_lower else '-',
         axis=1
     )
-
-    # Robust Reference Number Display:
-    # This uses the already cleaned 'reference_number' column from clean_payments_data
     df_display['reference_number_display'] = df_display.apply(
         lambda row: str(row['reference_number']) if str(row['reference_number']).strip() != '' else '-',
         axis=1
     )
-
-    # Format 'type' for display ('paid_to_me' -> 'Received', 'i_paid' -> 'Paid')
     df_display['type_display'] = df_display['type'].map({'paid_to_me': 'Received', 'i_paid': 'Paid'}).fillna('')
-
     return df_display
 
-
 def generate_html_summary(df):
-    """
-    Generates an HTML summary report based on the provided DataFrame.
-    """
     try:
-        # Prepare DataFrame for HTML display using the robust function
         transactions_display = prepare_dataframe_for_display(df)
-
-        # Calculate payment totals from the original (unmodified) DataFrame for accuracy
         df_for_totals = df.copy()
         df_for_totals['amount'] = pd.to_numeric(df_for_totals['amount'], errors='coerce').fillna(0.0)
         df_for_totals['type'] = df_for_totals['type'].astype(str).str.lower()
@@ -300,7 +236,6 @@ def generate_html_summary(df):
 
         payment_totals = df_for_totals.groupby(['type', 'payment_method'])['amount'].sum().unstack().fillna(0)
 
-        # Prepare summary statistics
         totals = {
             'total_received': df_for_totals[df_for_totals['type'] == 'paid_to_me']['amount'].sum(),
             'pending_received': df_for_totals[(df_for_totals['type'] == 'paid_to_me') &
@@ -324,11 +259,99 @@ def generate_html_summary(df):
                            df_for_totals[df_for_totals['type'] == 'i_paid']['amount'].sum())
         }
 
-        # Read people data for filters
         people_df = pd.read_csv(PEOPLE_FILE)
         person_options_html = ''.join(f'<option value="{name}">{name}</option>' for name in sorted(people_df['name'].unique()))
 
-        # Generate HTML with premium styling and filters
+        client_expenses_df_all = pd.DataFrame()
+        if os.path.exists(CLIENT_EXPENSES_FILE) and os.path.getsize(CLIENT_EXPENSES_FILE) > 0:
+            client_expenses_df_all = pd.read_csv(CLIENT_EXPENSES_FILE, dtype={'original_transaction_ref_num': str, 'expense_person': str}, keep_default_na=False)
+            client_expenses_df_all['expense_amount'] = pd.to_numeric(client_expenses_df_all['expense_amount'], errors='coerce').fillna(0.0)
+            client_expenses_df_all['expense_person'] = client_expenses_df_all['expense_person'].astype(str)
+            client_expenses_df_all['expense_date'] = pd.to_datetime(client_expenses_df_all['expense_date'], errors='coerce').dt.strftime('%Y-%m-%d').fillna('')
+        
+        total_paid_to_clients = df_for_totals[df_for_totals['type'] == 'i_paid'].groupby('person')['amount'].sum().reset_index()
+        total_paid_to_clients.rename(columns={'person': 'client_name', 'amount': 'total_paid_to_client'}, inplace=True)
+
+        total_spent_by_clients = pd.DataFrame()
+        if not client_expenses_df_all.empty:
+            total_spent_by_clients = client_expenses_df_all.groupby('expense_person')['expense_amount'].sum().reset_index()
+            total_spent_by_clients.rename(columns={'expense_person': 'client_name', 'expense_amount': 'total_spent_by_client'}, inplace=True)
+
+        summary_by_client_df = pd.merge(
+            total_paid_to_clients,
+            total_spent_by_clients,
+            on='client_name',
+            how='outer'
+        ).fillna(0)
+        
+        if 'client_name' in summary_by_client_df.columns:
+            summary_by_client_df['client_name'] = summary_by_client_df['client_name'].astype(str).fillna('')
+
+        client_overview_html = ""
+        if not summary_by_client_df.empty:
+            client_overview_html += """
+            <h3 class="section-subtitle"><i class="fas fa-chart-pie"></i> Spending Overview by Client</h3>
+            <table class="client-summary-table">
+                <thead>
+                    <tr>
+                        <th>Client Name</th>
+                        <th>Total Paid to Client</th>
+                        <th>Total Spent by Client</th>
+                        <th>Remaining Balance</th>
+                    </tr>
+                </thead>
+                <tbody>
+            """
+            for idx, row in summary_by_client_df.iterrows():
+                balance_class = 'positive-balance' if row['remaining_balance'] >= 0 else 'negative-balance'
+                client_overview_html += f"""
+                    <tr>
+                        <td>{row['client_name']}</td>
+                        <td>Rs. {row['total_paid_to_client']:,.2f}</td>
+                        <td>Rs. {row['total_spent_by_client']:,.2f}</td>
+                        <td class="{balance_class}">Rs. {row['remaining_balance']:,.2f}</td>
+                    </tr>
+                """
+            client_overview_html += """
+                </tbody>
+            </table>
+            """
+        else:
+            client_overview_html = "<p class='no-results'>No client spending overview available yet.</p>"
+
+        detailed_expenses_html = ""
+        if not client_expenses_df_all.empty:
+            detailed_expenses_html += """
+            <h3 class="section-subtitle"><i class="fas fa-list-alt"></i> Detailed Client Expenses</h3>
+            <table class="detailed-expenses-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Client Name</th>
+                        <th>Category</th>
+                        <th>Amount</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+            """
+            for idx, row in client_expenses_df_all.iterrows():
+                detailed_expenses_html += f"""
+                    <tr>
+                        <td>{row['expense_date']}</td>
+                        <td>{row['expense_person']}</td>
+                        <td>{row['expense_category']}</td>
+                        <td>Rs. {row['expense_amount']:,.2f}</td>
+                        <td>{row['expense_description'] if row['expense_description'] else '-'}</td>
+                    </tr>
+                """
+            detailed_expenses_html += """
+                </tbody>
+            </table>
+            """
+        else:
+            detailed_expenses_html = "<p class='no-results'>No detailed client expenses to display yet.</p>"
+
         html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -466,6 +489,21 @@ def generate_html_summary(df):
             margin-right: 10px;
             color: #007bff;
         }}
+        .section-subtitle {{
+            font-size: 1.3em;
+            color: #34495e;
+            margin-top: 30px;
+            margin-bottom: 15px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 8px;
+            display: flex;
+            align-items: center;
+        }}
+        .section-subtitle i {{
+            margin-right: 8px;
+            color: #28a745;
+        }}
+
 
         .filters {{
             background-color: #fdfdfd;
@@ -544,7 +582,7 @@ def generate_html_summary(df):
             margin-bottom: 40px;
             background-color: #fdfdfd;
             border-radius: 10px;
-            overflow: hidden; /* Ensures rounded corners apply to content */
+            overflow: hidden;
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.06);
         }}
         th, td {{
@@ -612,7 +650,85 @@ def generate_html_summary(df):
             color: #95a5a6;
         }}
 
-        /* Responsive adjustments */
+        .tabs {{
+            margin-top: 30px;
+            margin-bottom: 40px;
+        }}
+        .tab-buttons {{
+            display: flex;
+            border-bottom: 2px solid #ddd;
+            margin-bottom: 20px;
+        }}
+        .tab-button {{
+            padding: 12px 25px;
+            cursor: pointer;
+            font-size: 1.1em;
+            font-weight: 500;
+            color: #555;
+            background-color: #f8f8f8;
+            border: 1px solid #ddd;
+            border-bottom: none;
+            border-top-left-radius: 8px;
+            border-top-right-radius: 8px;
+            margin-right: 5px;
+            transition: all 0.3s ease;
+        }}
+        .tab-button:hover {{
+            background-color: #eee;
+            color: #333;
+        }}
+        .tab-button.active {{
+            background-color: #ffffff;
+            color: #007bff;
+            border-color: #007bff;
+            border-bottom: 2px solid #ffffff;
+            transform: translateY(2px);
+            box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.05);
+            z-index: 1;
+        }}
+        .tab-content {{
+            background-color: #ffffff;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+            position: relative;
+            top: -2px;
+        }}
+        .tab-pane {{
+            display: none;
+        }}
+        .tab-pane.active {{
+            display: block;
+        }}
+
+        .client-summary-table .positive-balance {{ color: #28a745; font-weight: 600; }}
+        .client-summary-table .negative-balance {{ color: #dc3545; font-weight: 600; }}
+
+        .download-button-container {{
+            text-align: right;
+            margin-bottom: 20px;
+        }}
+        .download-button {{
+            background-color: #28a745;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: 500;
+            transition: background-color 0.3s ease, transform 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+        }}
+        .download-button i {{
+            margin-right: 8px;
+        }}
+        .download-button:hover {{
+            background-color: #218838;
+            transform: translateY(-2px);
+        }}
+
         @media (max-width: 768px) {{
             .summary-cards {{
                 grid-template-columns: 1fr;
@@ -659,7 +775,6 @@ def generate_html_summary(df):
                 font-weight: 600;
                 color: #555;
             }}
-            /* Specific labels for mobile view */
             td:nth-of-type(1):before {{ content: "Date"; }}
             td:nth-of-type(2):before {{ content: "Person"; }}
             td:nth-of-type(3):before {{ content: "Amount"; }}
@@ -669,18 +784,95 @@ def generate_html_summary(df):
             td:nth-of-type(7):before {{ content: "Reference No."; }}
             td:nth-of-type(8):before {{ content: "Status"; }}
             td:nth-of-type(9):before {{ content: "Description"; }}
+
+            .client-summary-table td:nth-of-type(1):before {{ content: "Client Name"; }}
+            .client-summary-table td:nth-of-type(2):before {{ content: "Total Paid"; }}
+            .client-summary-table td:nth-of-type(3):before {{ content: "Total Spent"; }}
+            .client-summary-table td:nth-of-type(4):before {{ content: "Balance"; }}
+
+            .detailed-expenses-table td:nth-of-type(1):before {{ content: "Date"; }}
+            .detailed-expenses-table td:nth-of-type(2):before {{ content: "Client Name"; }}
+            .detailed-expenses-table td:nth-of-type(3):before {{ content: "Category"; }}
+            .detailed-expenses-table td:nth-of-type(4):before {{ content: "Amount"; }}
+            .detailed-expenses-table td:nth-of-type(5):before {{ content: "Description"; }}
+        }}
+
+        @media print {{
+            body {{
+                background-color: #fff;
+                margin: 0;
+                padding: 0;
+            }}
+            .container {{
+                box-shadow: none;
+                border-radius: 0;
+                margin: 0;
+                padding: 0;
+                max-width: none;
+            }}
+            header, .summary-cards, .filters, .tabs, .tab-buttons, .tab-content {{
+                box-shadow: none !important;
+                border: none !important;
+                margin: 0 !important;
+                padding: 0 !important;
+            }}
+            .tab-button, .tab-pane {{
+                display: block !important;
+                width: 100% !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                background-color: #fff !important;
+                border: none !important;
+            }}
+            .tab-buttons {{
+                display: none;
+            }}
+            .tab-pane.active {{
+                display: block;
+            }}
+            .download-button-container, .footer {{
+                display: none;
+            }}
+            table {{
+                box-shadow: none;
+                border-radius: 0;
+                margin-bottom: 20px;
+            }}
+            th, td {{
+                border: 1px solid #ddd;
+                padding: 8px;
+            }}
+            .no-results {{
+                display: none;
+            }}
+            .section-title, .section-subtitle {{
+                page-break-after: avoid;
+                margin-top: 20px;
+                margin-bottom: 10px;
+                padding-bottom: 5px;
+                border-bottom: 1px solid #ccc;
+            }}
         }}
     </style>
     <script>
         $(document).ready(function() {{
-            // Set default date range on load
             const today = new Date();
             const oneMonthAgo = new Date();
             oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
             $('#start-date').val(oneMonthAgo.toISOString().split('T')[0]);
             $('#end-date').val(today.toISOString().split('T')[0]);
 
-            applyFilters(); // Apply filters immediately on page load with default dates
+            applyFilters();
+
+            $('.tab-button').on('click', function() {{
+                const tabId = $(this).data('tab');
+                $('.tab-button').removeClass('active');
+                $(this).addClass('active');
+                $('.tab-pane').removeClass('active');
+                $('#' + tabId).addClass('active');
+            }});
+
+            $('.tab-button[data-tab="transactions-tab"]').click();
         }});
 
         function applyFilters() {{
@@ -690,88 +882,60 @@ def generate_html_summary(df):
             const type = $('#type-filter').val();
             const method = $('#method-filter').val().toLowerCase();
             const chequeStatus = $('#status-filter').val().toLowerCase();
-            const referenceNumber = $('#reference-number-filter').val().toLowerCase(); // New filter
-
-            console.log("--- Applying Filters ---");
-            console.log("Start Date:", startDate);
-            console.log("End Date:", endDate);
-            console.log("Person Filter:", person);
-            console.log("Type Filter:", type);
-            console.log("Method Filter:", method);
-            console.log("Cheque Status Filter:", chequeStatus);
-            console.log("Reference Number Filter:", referenceNumber); // Log new filter
+            const referenceNumber = $('#reference-number-filter').val().toLowerCase();
 
             let visibleRows = 0;
 
             $('#transactions-table tbody tr').each(function() {{
-                const rowDate = $(this).data('date'); // This will be YYYY-MM-DD
+                const rowDate = $(this).data('date');
                 const rowPerson = $(this).data('person').toString().toLowerCase();
                 const rowType = $(this).data('type');
                 const rowMethod = $(this).data('method').toString().toLowerCase();
                 const rowChequeStatus = $(this).data('cheque-status').toString().toLowerCase();
-                const rowReferenceNumber = $(this).data('reference-number').toString().toLowerCase(); // Get new data attribute
+                const rowReferenceNumber = $(this).data('reference-number').toString().toLowerCase();
 
-                console.log("Processing Row:", {{ rowDate, rowPerson, rowType, rowMethod, rowChequeStatus, rowReferenceNumber }});
-
-                // Date filter: Compare YYYY-MM-DD strings directly
                 const datePass = (!startDate || rowDate >= startDate) && (!endDate || rowDate <= endDate);
-
-                // Person filter
                 const personPass = !person || rowPerson.includes(person);
-
-                // Type filter
                 const typePass = !type || rowType === type;
-
-                // Method filter
                 const methodPass = !method || rowMethod === method;
-
-                // Cheque status filter
-                const chequeStatusPass = !chequeStatus ||
-                                      (rowChequeStatus && rowChequeStatus.includes(chequeStatus));
-                
-                // Reference Number filter (new)
+                const chequeStatusPass = !chequeStatus || (rowChequeStatus && rowChequeStatus.includes(chequeStatus));
                 const referenceNumberPass = !referenceNumber || rowReferenceNumber.includes(referenceNumber);
-
 
                 if (datePass && personPass && typePass && methodPass && chequeStatusPass && referenceNumberPass) {{
                     $(this).show();
                     visibleRows++;
-                    console.log("Row PASSED filters.");
                 }} else {{
                     $(this).hide();
-                    console.log("Row FAILED filters.");
                 }}
             }});
 
-            // Show/hide no results message
             if (visibleRows === 0) {{
                 $('#no-results').show();
                 $('#transactions-table').hide();
-                console.log("No results found.");
             }} else {{
                 $('#no-results').hide();
                 $('#transactions-table').show();
-                console.log(visibleRows + " results found.");
             }}
-            console.log("--- Filters Applied ---");
         }}
 
         function resetFilters() {{
-            // Reset select inputs
             $('#name-filter').val('');
             $('#type-filter').val('');
             $('#method-filter').val('');
             $('#status-filter').val('');
-            $('#reference-number-filter').val(''); // Reset new filter
+            $('#reference-number-filter').val('');
 
-            // Reset date inputs to default range
             const today = new Date();
             const oneMonthAgo = new Date();
             oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
             $('#start-date').val(oneMonthAgo.toISOString().split('T')[0]);
             $('#end-date').val(today.toISOString().split('T')[0]);
             
-            applyFilters(); // Apply filters after resetting
+            applyFilters();
+        }}
+
+        function downloadPdf() {{
+            window.print();
         }}
     </script>
 </head>
@@ -909,124 +1073,135 @@ def generate_html_summary(df):
             </div>
         </div>
 
-        <h2 class="section-title">
-            <i class="fas fa-list"></i> All Transactions
-        </h2>
+        <div class="tabs">
+            <div class="tab-buttons">
+                <button class="tab-button" data-tab="transactions-tab">
+                    <i class="fas fa-list"></i> All Transactions
+                </button>
+                <button class="tab-button" data-tab="client-expenses-tab">
+                    <i class="fas fa-money-check-alt"></i> Client Expenses
+                </button>
+            </div>
 
-        <div class="no-results" id="no-results">
-            <i class="fas fa-search" style="font-size: 24px; margin-bottom: 10px;"></i>
-            <p>No transactions match your filters</p>
-        </div>
+            <div class="tab-content">
+                <div id="transactions-tab" class="tab-pane">
+                    <h2 class="section-title">
+                        <i class="fas fa-list"></i> All Transactions
+                    </h2>
+                    <div class="no-results" id="no-results">
+                        <i class="fas fa-search" style="font-size: 24px; margin-bottom: 10px;"></i>
+                        <p>No transactions match your filters</p>
+                    </div>
 
-        <table id="transactions-table">
-            <thead>
-                <tr>
-                    <th>Date</th>
-                    <th>Person</th>
-                    <th>Amount</th>
-                    <th>Type</th>
-                    <th>Method</th>
-                    <th>Cheque Status</th>
-                    <th>Reference No.</th>
-                    <th>Status</th>
-                    <th>Description</th>
-                </tr>
-            </thead>
-            <tbody>"""
+                    <table id="transactions-table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Person</th>
+                                <th>Amount</th>
+                                <th>Type</th>
+                                <th>Method</th>
+                                <th>Cheque Status</th>
+                                <th>Reference No.</th>
+                                <th>Status</th>
+                                <th>Description</th>
+                            </tr>
+                        </thead>
+                        <tbody>"""
 
-        # Add transaction rows with correct column data using the original, cleaned DataFrame for data attributes
-        for idx, row in df.iterrows(): # Use 'df' directly for data attributes
-            # Ensure values are strings for data attributes
-            # Use formatted_date for the data-date attribute
+        for idx, row in df.iterrows():
             row_date = transactions_display.loc[idx, 'formatted_date'] if pd.notna(transactions_display.loc[idx, 'date_parsed']) else ''
             row_person = str(row['person'])
             row_type = str(row['type'])
             row_method = str(row['payment_method']).lower()
             row_cheque_status = str(row['cheque_status']).lower() if str(row['cheque_status']).strip() != '' else ''
-            row_reference_number = str(row['reference_number']).lower() if str(row['reference_number']).strip() != '' else '' # New data attribute
+            row_reference_number = str(row['reference_number']).lower() if str(row['reference_number']).strip() != '' else ''
 
-            # Use the _display columns for visible content
             cheque_status_class = str(transactions_display.loc[idx, 'cheque_status_display']).lower().replace(' ', '-').replace('/', '-') if transactions_display.loc[idx, 'cheque_status_display'] != '-' else ''
             status_class = str(transactions_display.loc[idx, 'transaction_status_display']).lower().replace(' ', '-') if transactions_display.loc[idx, 'transaction_status_display'] != '-' else ''
 
             html += f"""
-                <tr data-date="{row_date}"
-                    data-person="{row_person}"
-                    data-type="{row_type}"
-                    data-method="{row_method}"
-                    data-cheque-status="{row_cheque_status}"
-                    data-reference-number="{row_reference_number}"> <!-- New data attribute -->
-                    <td>{transactions_display.loc[idx, 'formatted_date']}</td>
-                    <td>{transactions_display.loc[idx, 'person']}</td>
-                    <td>{transactions_display.loc[idx, 'amount_display']}</td>
-                    <td>{transactions_display.loc[idx, 'type_display']}</td>
-                    <td>{str(transactions_display.loc[idx, 'payment_method']).capitalize()}</td>
-                    <td><span class="status {cheque_status_class}">{transactions_display.loc[idx, 'cheque_status_display']}</span></td>
-                    <td>{transactions_display.loc[idx, 'reference_number_display']}</td>
-                    <td><span class="status {status_class}">{transactions_display.loc[idx, 'transaction_status_display']}</span></td>
-                    <td>{transactions_display.loc[idx, 'description'] if transactions_display.loc[idx, 'description'] else '-'}</td>
-                </tr>"""
+                            <tr data-date="{row_date}"
+                                data-person="{row_person}"
+                                data-type="{row_type}"
+                                data-method="{row_method}"
+                                data-cheque-status="{row_cheque_status}"
+                                data-reference-number="{row_reference_number}">
+                                <td>{transactions_display.loc[idx, 'formatted_date']}</td>
+                                <td>{transactions_display.loc[idx, 'person']}</td>
+                                <td>{transactions_display.loc[idx, 'amount_display']}</td>
+                                <td>{transactions_display.loc[idx, 'type_display']}</td>
+                                <td>{str(transactions_display.loc[idx, 'payment_method']).capitalize()}</td>
+                                <td><span class="status {cheque_status_class}">{transactions_display.loc[idx, 'cheque_status_display']}</span></td>
+                                <td>{transactions_display.loc[idx, 'reference_number_display']}</td>
+                                <td><span class="status {status_class}">{transactions_display.loc[idx, 'transaction_status_display']}</span></td>
+                                <td>{transactions_display.loc[idx, 'description'] if transactions_display.loc[idx, 'description'] else '-'}</td>
+                            </tr>"""
 
-        html += """
-            </tbody>
-        </table>
+        html += f"""
+                        </tbody>
+                    </table>
+                </div>
+
+                <div id="client-expenses-tab" class="tab-pane">
+                    <div class="download-button-container">
+                        <button class="download-button" onclick="downloadPdf()">
+                            <i class="fas fa-file-pdf"></i> Download as PDF
+                        </button>
+                    </div>
+                    <h2 class="section-title">
+                        <i class="fas fa-money-check-alt"></i> Client Expenses Overview
+                    </h2>
+                    {client_overview_html}
+                    {detailed_expenses_html}
+                </div>
+            </div>
+        </div>
 
         <div class="footer">
             <p><i class="fas fa-file-alt"></i> This report was automatically generated by Payment Tracker System</p>
-            <p><i class="far fa-copyright"></i> {{datetime.now().year}} All Rights Reserved</p>
+            <p><i class="far fa-copyright"></i> {datetime.now().year} All Rights Reserved</p>
         </div>
     </div>
 </body>
 </html>"""
 
-        # Save the HTML file
         os.makedirs(os.path.dirname(SUMMARY_FILE), exist_ok=True)
         with open(SUMMARY_FILE, "w", encoding="utf-8") as f:
             f.write(html)
-        st.toast("HTML summary generated successfully!")
         return True
     except Exception as e:
         st.error(f"Error generating HTML summary: {e}")
         return False
 
 def generate_invoice_pdf(person_name, transactions_df, invoice_type_display, start_date=None, end_date=None):
-    """
-    Generates a professional PDF invoice using FPDF.
-    Returns the path to the generated PDF file.
-    """
     try:
-        # Custom PDF class for header and footer
         class PDF(FPDF):
             def header(self):
                 self.set_font("Arial", "B", 24)
-                self.set_text_color(0, 123, 255) # Blue for company name
+                self.set_text_color(0, 123, 255)
                 self.cell(0, 10, "Soft Tech Business System", ln=True, align='C')
-                self.set_font("Arial", size=10)
-                self.set_text_color(85, 85, 85) # Grey for contact info
-                self.cell(0, 5, "softtechBusinesssystem@gmail.com | 03027070785", ln=True, align='C')
-                self.cell(0, 5, "123 Financial Lane, Business City, BC 12345", ln=True, align='C')
                 self.ln(10)
-                self.set_draw_color(0, 123, 255) # Blue line
-                self.line(10, self.get_y(), 200, self.get_y()) # Draw a line below the header
+                self.set_draw_color(0, 123, 255)
+                self.line(10, self.get_y(), 200, self.get_y())
                 self.ln(10)
 
             def footer(self):
-                self.set_y(-25) # Position 25mm from bottom
+                self.set_y(-25)
                 self.set_font("Arial", "I", 9)
-                self.set_text_color(127, 140, 141) # Light grey for footer text
+                self.set_text_color(127, 140, 141)
                 self.cell(0, 5, "Thank you for your business!", ln=True, align='C')
                 self.cell(0, 5, f"© {datetime.now().year} Soft Tech Business System. All Rights Reserved.", ln=True, align='C')
-                self.set_y(-15) # Position for page number
+                self.set_y(-15)
                 self.set_font("Arial", size=8)
                 self.cell(0, 10, f"Page {self.page_no()}/{{nb}}", 0, 0, 'C')
 
         pdf = PDF()
-        pdf.alias_nb_pages() # Required for {nb} in footer
+        pdf.alias_nb_pages()
         pdf.add_page()
 
-        # Invoice Title and Details
         pdf.set_font("Arial", "B", size=36)
-        pdf.set_text_color(52, 73, 94) # Dark blue-grey for title
+        pdf.set_text_color(52, 73, 94)
         pdf.cell(0, 20, "INVOICE", ln=True, align='C')
         pdf.ln(5)
 
@@ -1035,24 +1210,20 @@ def generate_invoice_pdf(person_name, transactions_df, invoice_type_display, sta
         invoice_id = str(uuid.uuid4()).split('-')[0].upper()
         invoice_date = datetime.now().strftime('%Y-%m-%d')
         
-        # Use columns for better alignment of invoice details
-        # Right align invoice details
         pdf.set_x(120) 
         pdf.cell(0, 7, f"Invoice #: INV-{invoice_id}", ln=True, align='L')
         pdf.set_x(120)
         pdf.cell(0, 7, f"Date: {invoice_date}", ln=True, align='L')
         pdf.ln(10)
 
-        # Bill To Section
         pdf.set_font("Arial", "B", size=14)
         pdf.set_text_color(52, 73, 94)
         pdf.cell(0, 10, "Bill To:", ln=True)
         pdf.set_font("Arial", size=12)
         pdf.set_text_color(85, 85, 85)
         pdf.cell(0, 7, person_name, ln=True)
-        pdf.ln(5) # Smaller line break
+        pdf.ln(5)
 
-        # Invoice For (Type of Invoice)
         pdf.set_font("Arial", "B", size=12)
         pdf.set_text_color(52, 73, 94)
         pdf.cell(0, 7, "Invoice For:", ln=True)
@@ -1064,95 +1235,98 @@ def generate_invoice_pdf(person_name, transactions_df, invoice_type_display, sta
             pdf.cell(0, 7, f"Transactions from {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}", ln=True)
         pdf.ln(10)
 
-        # Transaction Table Header
-        pdf.set_fill_color(233, 236, 239) # Light grey background for header
-        pdf.set_text_color(73, 80, 87) # Darker grey for header text
-        pdf.set_font("Arial", "B", size=8) # Reduced font size for more columns
+        pdf.set_fill_color(233, 236, 239)
+        pdf.set_text_color(73, 80, 87)
+        pdf.set_font("Arial", "B", size=8)
         
-        # Adjusted column widths for new columns to prevent overlapping
-        # Total usable width = 210 (A4 width) - 2 * 10 (left/right margins) = 190mm
-        col_widths = [20, 50, 20, 20, 30, 30, 20] # Date, Description, Type, Method, Cheque Status, Reference No., Amount
-        # Sum = 20+50+20+20+30+30+20 = 190mm
+        col_widths = [20, 50, 15, 15, 30, 40, 20]
 
         pdf.cell(col_widths[0], 10, "Date", 1, 0, 'L', 1)
         pdf.cell(col_widths[1], 10, "Description", 1, 0, 'L', 1)
         pdf.cell(col_widths[2], 10, "Type", 1, 0, 'L', 1)
-        pdf.cell(col_widths[3], 10, "Method", 1, 0, 'L', 1) # New column
-        pdf.cell(col_widths[4], 10, "Chq. Status", 1, 0, 'L', 1) # New column
-        pdf.cell(col_widths[5], 10, "Ref. No.", 1, 0, 'L', 1) # New column
-        pdf.cell(col_widths[6], 10, "Amount", 1, 1, 'R', 1) # ln=1 moves to next line
+        pdf.cell(col_widths[3], 10, "Method", 1, 0, 'L', 1) 
+        pdf.cell(col_widths[4], 10, "Chq. Status", 1, 0, 'L', 1) 
+        pdf.cell(col_widths[5], 10, "Ref. No.", 1, 0, 'L', 1) 
+        pdf.cell(col_widths[6], 10, "Amount", 1, 1, 'R', 1)
 
-        # Transaction Table Rows
-        pdf.set_font("Arial", size=8) # Reduced font size for rows
-        pdf.set_text_color(51, 51, 51) # Black for body text
+        pdf.set_font("Arial", size=8)
+        pdf.set_text_color(51, 51, 51)
         total_amount = 0.0
 
         if not transactions_df.empty:
-            # Ensure 'date_parsed' is available and sort by it
             transactions_df_sorted = transactions_df.sort_values(by='date_parsed', ascending=True)
             for i, row in enumerate(transactions_df_sorted.iterrows()):
-                idx, row_data = row # Unpack the tuple
+                idx, row_data = row
                 total_amount += row_data['amount']
-                # Add alternating row colors
                 if i % 2 == 0:
-                    pdf.set_fill_color(248, 249, 250) # Lightest grey
+                    pdf.set_fill_color(248, 249, 250)
                 else:
-                    pdf.set_fill_color(255, 255, 255) # White
+                    pdf.set_fill_color(255, 255, 255)
 
-                # Use 'formatted_date' for display in PDF
-                # Use multi_cell for description to handle wrapping
-                pdf.cell(col_widths[0], 10, str(row_data['formatted_date']), 1, 0, 'L', 1)
-                
-                # Store current Y position before multi_cell for alignment
-                x_before_desc = pdf.get_x()
-                y_before_desc = pdf.get_y()
-                
-                # Multi_cell for description to allow text wrapping
-                pdf.multi_cell(col_widths[1], 5, str(row_data['description'] if row_data['description'] else '-'), border=0, align='L', fill=1)
-                
-                # Calculate the height taken by multi_cell and move to the next column's starting X
-                # The height of the row will be determined by the tallest cell (description)
-                y_after_desc = pdf.get_y()
-                row_height = y_after_desc - y_before_desc
-                
-                # Move back to the original Y, and then to the X position for the next column
-                pdf.set_xy(x_before_desc + col_widths[1], y_before_desc)
+                description_text = str(row_data['description'] if row_data['description'] else '-')
+                reference_number_text = str(row_data['reference_number_display'])
 
-                pdf.cell(col_widths[2], row_height, str(row_data['type_display']), 1, 0, 'L', 1)
-                pdf.cell(col_widths[3], row_height, str(row_data['payment_method']).capitalize(), 1, 0, 'L', 1) 
-                pdf.cell(col_widths[4], row_height, str(row_data['cheque_status_display']), 1, 0, 'L', 1) 
-                pdf.cell(col_widths[5], row_height, str(row_data['reference_number_display']), 1, 0, 'L', 1) 
-                pdf.cell(col_widths[6], row_height, f"Rs. {row_data['amount']:,.2f}", 1, 1, 'R', 1) # 1,1 moves to next line
+                pdf.set_font("Arial", size=8)
+                desc_line_height = pdf.font_size * 1.2
+                desc_num_lines = pdf.get_string_width(description_text) / col_widths[1]
+                desc_height = max(10, desc_num_lines * desc_line_height)
+
+                row_total_height = max(10, desc_height)
+
+                if pdf.get_y() + row_total_height + 55 > pdf.h:
+                    pdf.add_page()
+                    pdf.set_fill_color(233, 236, 239)
+                    pdf.set_text_color(73, 80, 87)
+                    pdf.set_font("Arial", "B", size=8)
+                    pdf.cell(col_widths[0], 10, "Date", 1, 0, 'L', 1)
+                    pdf.cell(col_widths[1], 10, "Description", 1, 0, 'L', 1)
+                    pdf.cell(col_widths[2], 10, "Type", 1, 0, 'L', 1)
+                    pdf.cell(col_widths[3], 10, "Method", 1, 0, 'L', 1)
+                    pdf.cell(col_widths[4], 10, "Chq. Status", 1, 0, 'L', 1)
+                    pdf.cell(col_widths[5], 10, "Ref. No.", 1, 0, 'L', 1)
+                    pdf.cell(col_widths[6], 10, "Amount", 1, 1, 'R', 1)
+                    pdf.set_font("Arial", size=8)
+                    pdf.set_text_color(51, 51, 51)
+
+                x_start_row = pdf.get_x()
+                y_start_row = pdf.get_y()
+                
+                pdf.cell(col_widths[0], row_total_height, str(row_data['formatted_date']), 1, 0, 'L', 1)
+                
+                pdf.set_xy(x_start_row + col_widths[0], y_start_row)
+                pdf.multi_cell(col_widths[1], desc_line_height, description_text, border=1, align='L', fill=1)
+                
+                current_y_after_multicell = pdf.get_y()
+                row_total_height = current_y_after_multicell - y_start_row
+
+                pdf.set_xy(x_start_row + col_widths[0] + col_widths[1], y_start_row)
+
+                pdf.cell(col_widths[2], row_total_height, str(row_data['type_display']), 1, 0, 'L', 1)
+                pdf.cell(col_widths[3], row_total_height, str(row_data['payment_method']).capitalize(), 1, 0, 'L', 1) 
+                pdf.cell(col_widths[4], row_total_height, str(row_data['cheque_status_display']), 1, 0, 'L', 1) 
+                pdf.cell(col_widths[5], row_total_height, reference_number_text, 1, 0, 'L', 1)
+                pdf.cell(col_widths[6], row_total_height, f"Rs. {row_data['amount']:,.2f}", 1, 1, 'R', 1)
 
         else:
-            pdf.set_fill_color(255, 255, 255) # White background for no transactions message
-            # Adjust cell width to span all columns
+            pdf.set_fill_color(255, 255, 255)
             pdf.cell(sum(col_widths), 20, "No transactions found for the selected criteria.", 1, 1, 'C', 1)
 
-        pdf.ln(10) # Add some space after the table
+        pdf.ln(10)
 
-        # Check remaining space before drawing totals to prevent overlap with footer
-        # Footer starts at Y = page_height - 25mm.
-        # If current Y + height_of_totals_section > page_height - 25mm, add new page.
-        # Estimate totals section height: 10mm (Total Amount cell) + 20mm (ln after) = 30mm
-        if pdf.get_y() + 30 > pdf.h - 35: # 35 chosen to give a bit more buffer than footer start (25)
+        if pdf.get_y() + 30 > pdf.h - 35:
             pdf.add_page()
-            pdf.ln(20) # Add initial space on new page
+            pdf.ln(20)
 
-        # Total Amount Summary
         pdf.set_font("Arial", "B", size=14)
-        pdf.set_text_color(0, 123, 255) # Blue for total
-        # Adjust total cell width to align with the amount column
+        pdf.set_text_color(0, 123, 255)
         pdf.cell(sum(col_widths) - col_widths[6], 10, "Total Amount:", 0, 0, 'R')
         pdf.cell(col_widths[6], 10, f"Rs. {total_amount:,.2f}", 0, 1, 'R')
         pdf.ln(20)
 
-        # Save PDF
         os.makedirs(INVOICE_DIR, exist_ok=True)
         
-        # --- New filename logic ---
         current_datetime_str = datetime.now().strftime('%Y%m%d_%H%M%S')
-        person_name_clean = person_name.replace(' ', '_').replace('.', '') # Clean name for filename
+        person_name_clean = person_name.replace(' ', '_').replace('.', '')
 
         if invoice_type_display == "all_transactions":
             pdf_filename = f"{person_name_clean}_All_Transactions_Invoice_{current_datetime_str}.pdf"
@@ -1160,16 +1334,11 @@ def generate_invoice_pdf(person_name, transactions_df, invoice_type_display, sta
             start_date_str_file = start_date.strftime('%Y%m%d')
             end_date_str_file = end_date.strftime('%Y%m%d')
             pdf_filename = f"{person_name_clean}_Invoice_{start_date_str_file}_to_{end_date_str_file}_{current_datetime_str}.pdf"
-        else: # This case should no longer be hit as "selected_transactions" is removed
+        else:
             pdf_filename = f"{person_name_clean}_Invoice_Generated_{current_datetime_str}.pdf"
-        # --- End new filename logic ---
 
         pdf_file_path = os.path.join(INVOICE_DIR, pdf_filename)
         pdf.output(pdf_file_path)
-
-        # --- Debugging print statement ---
-        print(f"DEBUG: PDF file saved locally as: {pdf_file_path}")
-        # --- End debugging print statement ---
         
         st.toast(f"PDF invoice generated at {pdf_file_path}")
         return pdf_file_path
@@ -1177,33 +1346,39 @@ def generate_invoice_pdf(person_name, transactions_df, invoice_type_display, sta
         st.error(f"Error generating PDF invoice: {e}")
         return None
 
-# Streamlit UI
 st.set_page_config(layout="wide")
 st.title("💰 Payment Tracker")
 st.sidebar.markdown(f"[🌐 View Public Summary]({SUMMARY_URL})", unsafe_allow_html=True)
 
 def reset_form_session_state_for_add_transaction():
-    """Resets session state variables for the 'Add Transaction' form."""
     st.session_state['selected_transaction_type'] = 'Paid to Me'
     st.session_state['payment_method'] = 'cash'
     st.session_state['selected_person'] = "Select..."
-    st.session_state['editing_row_idx'] = None # Ensure edit mode is off
-    # Clear form inputs by setting their keys to default values
-    st.session_state['add_amount'] = None # Reset to None
-    st.session_state['add_date'] = None # Reset to None
+    st.session_state['editing_row_idx'] = None
+    st.session_state['add_amount'] = None
+    st.session_state['add_date'] = None
     st.session_state['add_reference_number'] = ''
     st.session_state['add_cheque_status'] = 'received/given'
     st.session_state['add_status'] = 'completed'
     st.session_state['add_description'] = ''
 
-# Handle form reset at the beginning of the rerun, if flagged
+def reset_form_session_state_for_add_client_expense():
+    st.session_state['selected_client_for_expense'] = "Select..."
+    st.session_state['add_client_expense_amount'] = None
+    st.session_state['add_client_expense_date'] = None
+    st.session_state['add_client_expense_category'] = 'General'
+    st.session_state['add_client_expense_description'] = ''
+
 if st.session_state.get('reset_add_form', False):
     reset_form_session_state_for_add_transaction()
-    st.session_state['reset_add_form'] = False # Reset the flag immediately after handling
+    st.session_state['reset_add_form'] = False
 
-tab1, tab2, tab3, tab4 = st.tabs(["Add Transaction", "View Transactions", "Manage People", "Generate Invoice"])
+if st.session_state.get('reset_client_expense_form', False):
+    reset_form_session_state_for_add_client_expense()
+    st.session_state['reset_client_expense_form'] = False
 
-# ------------------ Tab 1: Add Transaction ------------------
+tab1, tab2, tab3, tab4 = st.tabs(["Add Transaction", "View Transactions", "Track Client Expenses", "Manage People"])
+
 with tab1:
     st.subheader("Add New Transaction")
     st.session_state['selected_transaction_type'] = st.radio(
@@ -1218,7 +1393,6 @@ with tab1:
     try:
         people_df = pd.read_csv(PEOPLE_FILE)
         category = 'investor' if st.session_state['selected_transaction_type'] == "Paid to Me" else 'client'
-        # Ensure 'name' is treated as string before filtering
         filtered_people = people_df[people_df['category'] == category]['name'].astype(str).tolist()
     except Exception as e:
         st.error(f"Error loading people data: {e}")
@@ -1226,28 +1400,19 @@ with tab1:
 
     person_options = ["Select..."] + sorted(filtered_people)
 
-    # Ensure selected_person is a valid option, or reset it
     if st.session_state['selected_person'] not in person_options:
         st.session_state['selected_person'] = "Select..."
 
     current_person_index = person_options.index(st.session_state['selected_person'])
 
-    with st.form("transaction_form", clear_on_submit=False): # Set clear_on_submit to False to manage state manually
+    with st.form("transaction_form", clear_on_submit=False):
         col1, col2 = st.columns(2)
         with col1:
-            # Conditionally pass value based on session state
             amount_value = st.session_state['add_amount']
-            if amount_value is None:
-                amount = st.number_input("Amount (Rs.)", min_value=0.0, format="%.2f", key='add_amount')
-            else:
-                amount = st.number_input("Amount (Rs.)", min_value=0.0, format="%.2f", value=float(amount_value), key='add_amount')
+            amount = st.number_input("Amount (Rs.)", min_value=0.0, format="%.2f", value=float(amount_value) if amount_value is not None else None, key='add_amount')
             
-            # Conditionally pass value based on session state
             date_value = st.session_state['add_date']
-            if date_value is None:
-                date = st.date_input("Date", key='add_date')
-            else:
-                date = st.date_input("Date", value=date_value, key='add_date')
+            date = st.date_input("Date", value=date_value, key='add_date')
 
             reference_number = st.text_input("Reference Number (Receipt/Cheque No.)",
                                              value=st.session_state['add_reference_number'], key='add_reference_number')
@@ -1269,10 +1434,7 @@ with tab1:
             st.session_state['selected_person'] = st.selectbox(
                 "Select Person", person_options, index=current_person_index, key='selected_person_dropdown'
             )
-            if st.session_state['selected_person'] == "Select...":
-                selected_person_final = None
-            else:
-                selected_person_final = st.session_state['selected_person']
+            selected_person_final = st.session_state['selected_person'] if st.session_state['selected_person'] != "Select..." else None
 
             default_status_idx = 0
             if st.session_state['add_status'] in valid_transaction_statuses_lower:
@@ -1292,40 +1454,54 @@ with tab1:
             if amount <= 0:
                 st.warning("Amount must be greater than 0.")
                 validation_passed = False
-            if not str(reference_number).strip(): # Use str() to handle potential None/NaN from widget
+            
+            normalized_reference_number = str(reference_number).strip()
+
+            if not normalized_reference_number:
                 if st.session_state['payment_method'] == "cheque":
                     st.warning(f"🚨 Reference Number is **REQUIRED** for cheque transactions.")
                 else:
                     st.warning(f"🚨 Reference Number is required.")
                 validation_passed = False
             
+            try:
+                existing_df = pd.read_csv(CSV_FILE, dtype={'reference_number': str}, keep_default_na=False)
+                existing_df['reference_number'] = existing_df['reference_number'].apply(
+                    lambda x: '' if pd.isna(x) or str(x).strip().lower() == 'nan' or str(x).strip().lower() == 'none' else str(x).strip()
+                )
+                if not existing_df.empty and normalized_reference_number in existing_df['reference_number'].values:
+                    st.warning(f"🚨 Duplicate Reference Number found: '{normalized_reference_number}'. Please use a unique reference number.")
+                    validation_passed = False
+            except Exception as e:
+                st.error(f"Error checking for duplicate reference numbers: {e}")
+                validation_passed = False
+
             if validation_passed:
                 try:
                     new_row = {
-                        "date": date.strftime("%Y-%m-%d"), # Store date as string YYYY-MM-DD
+                        "date": date.strftime("%Y-%m-%d"),
                         "person": selected_person_final,
                         "amount": amount,
                         "type": 'paid_to_me' if st.session_state['selected_transaction_type'] == "Paid to Me" else 'i_paid',
-                        "status": status, # This 'status' column is redundant with 'transaction_status' but kept for compatibility
+                        "status": status,
                         "description": description,
                         "payment_method": st.session_state['payment_method'],
-                        "reference_number": str(reference_number).strip(), # Explicitly cast to string before saving
+                        "reference_number": normalized_reference_number,
                         "cheque_status": cheque_status_val if st.session_state['payment_method'] == "cheque" else None,
-                        "transaction_status": status # Use the selected status for transaction_status
+                        "transaction_status": status
                     }
                     pd.DataFrame([new_row]).to_csv(CSV_FILE, mode='a', header=False, index=False)
                     
-                    # Read the updated CSV and CLEAN IT before generating HTML
-                    updated_df = pd.read_csv(CSV_FILE, dtype={'reference_number': str}, keep_default_na=False) # Re-read with dtype fix
+                    updated_df = pd.read_csv(CSV_FILE, dtype={'reference_number': str}, keep_default_na=False)
                     updated_df['reference_number'] = updated_df['reference_number'].apply(
                         lambda x: '' if pd.isna(x) or str(x).strip().lower() == 'nan' or str(x).strip().lower() == 'none' else str(x).strip()
                     )
-                    updated_df = clean_payments_data(updated_df) # This will convert date strings to datetime objects
-                    updated_df.to_csv(CSV_FILE, index=False) # Save the cleaned data back to CSV
+                    updated_df = clean_payments_data(updated_df)
+                    updated_df.to_csv(CSV_FILE, index=False)
 
                     html_generated = generate_html_summary(updated_df)
                     git_pushed = False
-                    if html_generated: # Only push to git if HTML generation was successful
+                    if html_generated:
                         git_pushed = git_push()
                     
                     if html_generated and git_pushed:
@@ -1335,34 +1511,27 @@ with tab1:
                     else:
                         st.error("Transaction added, but HTML summary or GitHub update failed.")
 
-                    st.session_state['reset_add_form'] = True # Set flag for next rerun
-                    st.rerun() # Rerun to clear form inputs visually
+                    st.session_state['reset_add_form'] = True
+                    st.rerun()
                 except Exception as e:
                     st.error(f"Error saving transaction: {e}")
 
-# ------------------ Tab 2: View Transactions ------------------
 with tab2:
     st.subheader("Transaction History")
 
     try:
-        # CRITICAL FIX: Force reference_number to be read as string here too
         df = pd.read_csv(CSV_FILE, dtype={'reference_number': str}, keep_default_na=False)
         df['reference_number'] = df['reference_number'].apply(
             lambda x: '' if pd.isna(x) or str(x).strip().lower() == 'nan' or str(x).strip().lower() == 'none' else str(x).strip()
         )
-        # Apply clean_payments_data to ensure dates are datetime objects and other columns are clean
         df = clean_payments_data(df)
 
-        # Check if DataFrame is empty
         if df.empty:
             st.info("No transactions recorded yet.")
             
-        # Prepare DataFrame for display, which includes validation and formatting
-        # Use a temporary DataFrame for filtering to avoid modifying the original 'df'
         temp_filtered_df = df.copy()
 
-        # Filters (apply filters on the original columns, then display with _display columns)
-        col1, col2, col3, col4 = st.columns(4) # Added a column for new filters
+        col1, col2, col3, col4 = st.columns(4)
         with col1:
             view_filter = st.radio("Filter by Type", ["All", "Received", "Paid"], horizontal=True, key='view_filter_radio')
         with col2:
@@ -1370,7 +1539,6 @@ with tab2:
         with col3:
             status_filter = st.selectbox("Status", ["All", "Completed", "Pending", "Received/Given", "Processing", "Bounced", "Processing Done"], key='status_filter_select')
         
-        # New filters for View Transactions tab
         try:
             people_df_view = pd.read_csv(PEOPLE_FILE)
             person_options_view = ["All"] + sorted(people_df_view['name'].astype(str).tolist())
@@ -1378,7 +1546,7 @@ with tab2:
             st.error(f"Error loading people data for view filter: {e}")
             person_options_view = ["All"]
 
-        with col4: # New column for person filter
+        with col4:
             st.session_state['view_person_filter'] = st.selectbox(
                 "Filter by Person",
                 person_options_view,
@@ -1392,39 +1560,31 @@ with tab2:
             placeholder="Enter reference number..."
         )
 
-        # Apply filters to the original columns for accurate filtering logic
         if view_filter != "All":
             temp_filtered_df = temp_filtered_df[temp_filtered_df['type'].map({'paid_to_me': 'Received', 'i_paid': 'Paid'}) == view_filter]
         if method_filter != "All":
             temp_filtered_df = temp_filtered_df[temp_filtered_df['payment_method'].astype(str).str.lower() == method_filter.lower()]
         if status_filter != "All":
-            if status_filter.lower() in valid_transaction_statuses_lower: # Check if it's a general transaction status
+            if status_filter.lower() in valid_transaction_statuses_lower:
                 temp_filtered_df = temp_filtered_df[temp_filtered_df['transaction_status'].astype(str).str.lower() == status_filter.lower()]
-            elif status_filter.lower() in valid_cheque_statuses_lower: # Check if it's a cheque specific status
+            elif status_filter.lower() in valid_cheque_statuses_lower:
                 temp_filtered_df = temp_filtered_df[temp_filtered_df['cheque_status'].astype(str).str.lower() == status_filter.lower()]
         
-        # Apply new person filter
         if st.session_state['view_person_filter'] != "All":
             temp_filtered_df = temp_filtered_df[temp_filtered_df['person'] == st.session_state['view_person_filter']]
 
-        # Apply new reference number search filter
         if st.session_state['view_reference_number_search']:
             search_term = st.session_state['view_reference_number_search'].lower()
             temp_filtered_df = temp_filtered_df[
                 temp_filtered_df['reference_number'].astype(str).str.lower().str.contains(search_term)
             ]
 
-
-        # Now apply the display preparation to the filtered data
         filtered_df_for_display = prepare_dataframe_for_display(temp_filtered_df)
-        # Add original index for editing purposes, ensuring it's available even if the original df was empty
         if not filtered_df_for_display.empty:
             filtered_df_for_display['original_index'] = temp_filtered_df.index
         else:
             st.info("No transactions match the current filters.")
 
-
-        # Display DataFrame with clearer column names using the _display columns
         display_columns = {
             'original_index': 'ID',
             'formatted_date': 'Date',
@@ -1432,9 +1592,9 @@ with tab2:
             'amount_display': 'Amount',
             'type_display': 'Type',
             'payment_method': 'Method',
-            'cheque_status_display': 'Cheque Status', # Using validated display column
-            'reference_number_display': 'Reference No.', # Using validated display column
-            'transaction_status_display': 'Status', # Using validated display column
+            'cheque_status_display': 'Cheque Status',
+            'reference_number_display': 'Reference No.',
+            'transaction_status_display': 'Status',
             'description': 'Description'
         }
 
@@ -1445,7 +1605,6 @@ with tab2:
                 hide_index=True
             )
 
-            # Edit Section
             st.markdown("---")
             st.subheader("Edit Transaction")
 
@@ -1461,12 +1620,9 @@ with tab2:
             if selected_edit_option != "Select a transaction":
                 selected_original_index = int(selected_edit_option.split(' - ')[0].replace('ID: ', ''))
 
-                # Set editing_row_idx and load data for editing form
                 if st.session_state['editing_row_idx'] != selected_original_index:
                     st.session_state['editing_row_idx'] = selected_original_index
-                    # FIX: Explicitly handle reference_number to avoid 'nan' in edit form
                     loaded_edit_data = df.loc[st.session_state['editing_row_idx']].to_dict()
-                    # Ensure reference_number is a clean string for the widget
                     ref_num_for_widget = loaded_edit_data.get('reference_number', '')
                     if pd.isna(ref_num_for_widget) or str(ref_num_for_widget).strip().lower() == 'nan' or str(ref_num_for_widget).strip().lower() == 'none':
                         loaded_edit_data['reference_number'] = ''
@@ -1474,9 +1630,8 @@ with tab2:
                         loaded_edit_data['reference_number'] = str(ref_num_for_widget).strip()
 
                     st.session_state['temp_edit_data'] = loaded_edit_data
-                    st.rerun() # Rerun to populate the form with data
+                    st.rerun()
 
-        # Edit Form (appears when editing_row_idx is set)
         if st.session_state['editing_row_idx'] is not None and st.session_state.get('temp_edit_data'):
             st.markdown("---")
             st.subheader(f"Editing Transaction ID: {st.session_state['editing_row_idx']}")
@@ -1487,21 +1642,18 @@ with tab2:
                 with col1_edit:
                     edited_amount = st.number_input("Amount (Rs.)", value=float(edit_data.get('amount', 0.0)), format="%.2f", key='edit_amount')
 
-                    # --- FIX START: Robust Date Handling for st.date_input ---
                     default_date_value = edit_data.get('date')
-                    if pd.isna(default_date_value): # Check for pandas NaT or numpy NaN
-                        default_date_value = None # Explicitly set to None for st.date_input
+                    if pd.isna(default_date_value):
+                        default_date_value = None
                     elif isinstance(default_date_value, pd.Timestamp):
-                        default_date_value = default_date_value.date() # Convert Timestamp to date object
+                        default_date_value = default_date_value.date()
                     elif isinstance(default_date_value, str):
                         try:
                             default_date_value = datetime.strptime(default_date_value, "%Y-%m-%d").date()
                         except ValueError:
-                            default_date_value = None # Handle invalid date strings
-                    # No 'else' fallback to datetime.now().date() if it's truly meant to be empty
+                            default_date_value = None
                     
                     edited_date = st.date_input("Date", value=default_date_value, key='edit_date')
-                    # --- FIX END: Robust Date Handling for st.date_input ---
 
                     edited_payment_method = st.radio(
                         "Payment Method",
@@ -1515,7 +1667,7 @@ with tab2:
                     if edited_payment_method == "cheque":
                         cheque_status_val = str(edit_data.get('cheque_status', 'processing')).lower()
                         if cheque_status_val not in valid_cheque_statuses_lower:
-                            cheque_status_val = 'processing' # Default to a valid status if current is invalid
+                            cheque_status_val = 'processing'
                         edited_cheque_status = st.selectbox(
                             "Cheque Status",
                             valid_cheque_statuses_lower,
@@ -1523,25 +1675,24 @@ with tab2:
                             key='edit_cheque_status'
                         )
                     else:
-                        edited_cheque_status = None # Ensure it's None for cash payments
+                        edited_cheque_status = None
 
                     edited_reference_number = st.text_input(
                         "Reference Number",
-                        value=str(edit_data.get('reference_number', '')), # This should now correctly show the string
+                        value=str(edit_data.get('reference_number', '')),
                         key='edit_reference_number'
                     )
 
                 with col2_edit:
                     try:
                         people_df = pd.read_csv(PEOPLE_FILE)
-                        people_list = people_df['name'].dropna().astype(str).tolist() # Ensure strings
+                        people_list = people_df['name'].dropna().astype(str).tolist()
                         current_person = str(edit_data.get('person', ''))
 
-                        # Handle case where person might not be in current people list
                         if current_person not in people_list and current_person != '':
                             people_list = [current_person] + people_list
                             default_index = 0
-                        elif current_person == '': # If person is empty, default to first option or 'Select...'
+                        elif current_person == '':
                              default_index = 0 if len(people_list) > 0 else 0
                         else:
                             default_index = people_list.index(current_person)
@@ -1554,11 +1705,11 @@ with tab2:
                         )
                     except Exception as e:
                         st.error(f"Error loading people data for edit: {e}")
-                        edited_person = str(edit_data.get('person', '')) # Fallback to existing value
+                        edited_person = str(edit_data.get('person', ''))
 
                     transaction_status_val = str(edit_data.get('transaction_status', 'completed')).lower()
                     if transaction_status_val not in valid_transaction_statuses_lower:
-                        transaction_status_val = 'completed' # Default to a valid status if current is invalid
+                        transaction_status_val = 'completed'
                     edited_transaction_status = st.selectbox(
                         "Transaction Status",
                         valid_transaction_statuses_lower,
@@ -1572,7 +1723,6 @@ with tab2:
                         key='edit_description'
                     )
 
-                # Form submit and cancel buttons
                 col1_btns, col2_btns = st.columns(2)
                 with col1_btns:
                     submit_button = st.form_submit_button("💾 Save Changes")
@@ -1584,39 +1734,54 @@ with tab2:
                     if edited_amount <= 0:
                         st.warning("Amount must be greater than 0.")
                         validation_passed = False
-                    if not str(edited_reference_number).strip(): # Use str() to handle potential None/NaN from widget
+                    
+                    normalized_edited_reference_number = str(edited_reference_number).strip()
+
+                    if not normalized_edited_reference_number:
                         if edited_payment_method == "cheque":
                             st.warning(f"🚨 Reference Number is **REQUIRED** for cheque transactions.")
                         else:
                             st.warning(f"🚨 Reference Number is required.")
                         validation_passed = False
                     
+                    try:
+                        existing_df = pd.read_csv(CSV_FILE, dtype={'reference_number': str}, keep_default_na=False)
+                        existing_df['reference_number'] = existing_df['reference_number'].apply(
+                            lambda x: '' if pd.isna(x) or str(x).strip().lower() == 'nan' or str(x).strip().lower() == 'none' else str(x).strip()
+                        )
+                        other_transactions = existing_df.drop(st.session_state['editing_row_idx'], errors='ignore')
+                        
+                        if not other_transactions.empty and normalized_edited_reference_number in other_transactions['reference_number'].values:
+                            st.warning(f"🚨 Duplicate Reference Number found: '{normalized_edited_reference_number}'. Please use a unique reference number.")
+                            validation_passed = False
+                    except Exception as e:
+                        st.error(f"Error checking for duplicate reference numbers during edit: {e}")
+                        validation_passed = False
+
                     if validation_passed:
                         try:
                             df.loc[st.session_state['editing_row_idx']] = {
-                                # --- FIX START: Save edited_date gracefully ---
-                                "date": edited_date.strftime("%Y-%m-%d") if edited_date else None, # Store date as string YYYY-MM-DD or None
-                                # --- FIX END: Save edited_date gracefully ---
+                                "date": edited_date.strftime("%Y-%m-%d"),
                                 "person": edited_person,
                                 "amount": edited_amount,
-                                "type": edit_data['type'], # Keep original type
-                                "status": edited_transaction_status, # Update 'status' column (redundant but kept)
+                                "type": edit_data['type'],
+                                "status": edited_transaction_status,
                                 "description": edited_description,
                                 "payment_method": edited_payment_method,
-                                "reference_number": str(edited_reference_number).strip(), # Explicitly cast to string
-                                "cheque_status": edited_cheque_status, # Will be None for cash
-                                "transaction_status": edited_transaction_status # Update 'transaction_status' column
+                                "reference_number": normalized_edited_reference_number,
+                                "cheque_status": edited_cheque_status,
+                                "transaction_status": edited_transaction_status
                             }
                             df.to_csv(CSV_FILE, index=False)
 
-                            updated_df_after_edit = pd.read_csv(CSV_FILE, dtype={'reference_number': str}, keep_default_na=False) # Re-read with dtype fix
+                            updated_df_after_edit = pd.read_csv(CSV_FILE, dtype={'reference_number': str}, keep_default_na=False)
                             updated_df_after_edit['reference_number'] = updated_df_after_edit['reference_number'].apply(
                                 lambda x: '' if pd.isna(x) or str(x).strip().lower() == 'nan' or str(x).strip().lower() == 'none' else str(x).strip()
                             )
-                            updated_df_after_edit = clean_payments_data(updated_df_after_edit) # This will convert date strings to datetime objects
-                            updated_df_after_edit.to_csv(CSV_FILE, index=False) # Save the cleaned DF
+                            updated_df_after_edit = clean_payments_data(updated_df_after_edit)
+                            updated_df_after_edit.to_csv(CSV_FILE, index=False)
                             
-                            generate_html_summary(updated_df_after_edit) # Pass the CLEANED df
+                            generate_html_summary(updated_df_after_edit)
                             git_push()
                             st.success("✅ Transaction updated successfully!")
                             st.session_state['editing_row_idx'] = None
@@ -1633,27 +1798,201 @@ with tab2:
     except Exception as e:
             st.error(f"Error loading transaction history: {str(e)}")
             
-
-# ------------------ Tab 3: Manage People ------------------
 with tab3:
+    st.subheader("Track Client Expenses")
+
+    try:
+        people_df_for_expenses = pd.read_csv(PEOPLE_FILE)
+        client_people = people_df_for_expenses[people_df_for_expenses['category'] == 'client']['name'].astype(str).tolist()
+        client_options = ["Select..."] + sorted(client_people)
+        
+        current_client_index = 0
+        if st.session_state['selected_client_for_expense'] in client_options:
+            current_client_index = client_options.index(st.session_state['selected_client_for_expense'])
+
+    except Exception as e:
+        st.error(f"Error loading client data for expenses: {e}")
+        client_options = ["Select..."]
+        current_client_index = 0
+        client_people = []
+
+    with st.form("client_expense_form", clear_on_submit=False):
+        st.session_state['selected_client_for_expense'] = st.selectbox(
+            "Select Client",
+            client_options,
+            index=current_client_index,
+            key='selected_client_for_expense_select'
+        )
+
+        col1_exp, col2_exp = st.columns(2)
+        with col1_exp:
+            expense_amount_value = st.session_state['add_client_expense_amount']
+            expense_amount = st.number_input("Expense Amount (Rs.)", min_value=0.0, format="%.2f", value=float(expense_amount_value) if expense_amount_value is not None else None, key='add_client_expense_amount')
+
+            expense_date_value = st.session_state['add_client_expense_date']
+            expense_date = st.date_input("Expense Date", value=expense_date_value, key='add_client_expense_date')
+
+        with col2_exp:
+            expense_category = st.selectbox(
+                "Expense Category",
+                valid_expense_categories,
+                index=valid_expense_categories.index(st.session_state['add_client_expense_category']),
+                key='add_client_expense_category'
+            )
+            expense_description = st.text_input(
+                "Expense Description",
+                value=st.session_state['add_client_expense_description'],
+                key='add_client_expense_description'
+            )
+        
+        submitted_expense = st.form_submit_button("Add Client Expense")
+
+        if submitted_expense:
+            expense_validation_passed = True
+            selected_client_final_for_expense = None
+
+            if st.session_state['selected_client_for_expense'] == "Select...":
+                st.warning("Please select a client.")
+                expense_validation_passed = False
+            else:
+                selected_client_final_for_expense = st.session_state['selected_client_for_expense']
+
+            if expense_amount <= 0:
+                st.warning("Expense amount must be greater than 0.")
+                expense_validation_passed = False
+            
+            payments_df_for_balance = pd.DataFrame()
+            if os.path.exists(CSV_FILE):
+                payments_df_for_balance = pd.read_csv(CSV_FILE, dtype={'reference_number': str}, keep_default_na=False)
+                payments_df_for_balance['amount'] = pd.to_numeric(payments_df_for_balance['amount'], errors='coerce').fillna(0.0)
+                payments_df_for_balance['person'] = payments_df_for_balance['person'].astype(str)
+                payments_df_for_balance['type'] = payments_df_for_balance['type'].astype(str).str.lower()
+
+            total_paid_to_this_client = payments_df_for_balance[
+                (payments_df_for_balance['type'] == 'i_paid') & 
+                (payments_df_for_balance['person'] == selected_client_final_for_expense)
+            ]['amount'].sum()
+
+            client_expenses_df = pd.DataFrame()
+            if os.path.exists(CLIENT_EXPENSES_FILE) and os.path.getsize(CLIENT_EXPENSES_FILE) > 0:
+                client_expenses_df = pd.read_csv(CLIENT_EXPENSES_FILE, dtype={'original_transaction_ref_num': str, 'expense_person': str}, keep_default_na=False)
+                client_expenses_df['expense_amount'] = pd.to_numeric(client_expenses_df['expense_amount'], errors='coerce').fillna(0.0)
+                client_expenses_df['expense_person'] = client_expenses_df['expense_person'].astype(str)
+
+            spent_by_this_client = client_expenses_df[
+                client_expenses_df['expense_person'] == selected_client_final_for_expense
+            ]['expense_amount'].sum()
+
+            if (spent_by_this_client + expense_amount) > total_paid_to_this_client:
+                st.warning(f"🚨 Total reported expenses (Rs. {spent_by_this_client + expense_amount:,.2f}) for {selected_client_final_for_expense} exceed the total amount paid to them (Rs. {total_paid_to_this_client:,.2f}). Remaining to be accounted for: Rs. {total_paid_to_this_client - spent_by_this_client:,.2f}")
+                expense_validation_passed = False
+            
+            if total_paid_to_this_client == 0:
+                st.warning(f"No money has been recorded as 'Paid to' {selected_client_final_for_expense} yet. Please add a corresponding 'I Paid' transaction first.")
+                expense_validation_passed = False
+
+            if expense_validation_passed:
+                try:
+                    new_expense_row = {
+                        "original_transaction_ref_num": "",
+                        "expense_date": expense_date.strftime("%Y-%m-%d"),
+                        "expense_person": selected_client_final_for_expense,
+                        "expense_category": expense_category,
+                        "expense_amount": expense_amount,
+                        "expense_description": expense_description
+                    }
+                    pd.DataFrame([new_expense_row]).to_csv(CLIENT_EXPENSES_FILE, mode='a', header=False, index=False)
+                    st.success("Client expense added successfully!")
+                    
+                    git_push()
+
+                    st.session_state['reset_client_expense_form'] = True
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Error saving client expense: {e}")
+
+    st.markdown("---")
+    st.subheader("Client Expense Summary")
+
+    try:
+        payments_df_all = pd.read_csv(CSV_FILE, dtype={'reference_number': str}, keep_default_na=False)
+        payments_df_all['amount'] = pd.to_numeric(payments_df_all['amount'], errors='coerce').fillna(0.0)
+        payments_df_all['person'] = payments_df_all['person'].astype(str)
+        payments_df_all['type'] = payments_df_all['type'].astype(str).str.lower()
+
+        client_expenses_df_all = pd.DataFrame()
+        if os.path.exists(CLIENT_EXPENSES_FILE) and os.path.getsize(CLIENT_EXPENSES_FILE) > 0:
+            client_expenses_df_all = pd.read_csv(CLIENT_EXPENSES_FILE, dtype={'original_transaction_ref_num': str, 'expense_person': str}, keep_default_na=False)
+            client_expenses_df_all['expense_amount'] = pd.to_numeric(client_expenses_df_all['expense_amount'], errors='coerce').fillna(0.0)
+            client_expenses_df_all['expense_person'] = client_expenses_df_all['expense_person'].astype(str)
+            client_expenses_df_all['expense_date'] = pd.to_datetime(client_expenses_df_all['expense_date'], errors='coerce').dt.strftime('%Y-%m-%d').fillna('')
+        
+        total_paid_to_clients = payments_df_all[payments_df_all['type'] == 'i_paid'].groupby('person')['amount'].sum().reset_index()
+        total_paid_to_clients.rename(columns={'person': 'client_name', 'amount': 'total_paid_to_client'}, inplace=True)
+
+        total_spent_by_clients = pd.DataFrame()
+        if not client_expenses_df_all.empty:
+            total_spent_by_clients = client_expenses_df_all.groupby('expense_person')['expense_amount'].sum().reset_index()
+            total_spent_by_clients.rename(columns={'expense_person': 'client_name', 'expense_amount': 'total_spent_by_client'}, inplace=True)
+
+        summary_by_client_df = pd.merge(
+            total_paid_to_clients,
+            total_spent_by_clients,
+            on='client_name',
+            how='outer'
+        ).fillna(0)
+
+        if 'client_name' in summary_by_client_df.columns:
+            summary_by_client_df['client_name'] = summary_by_client_df['client_name'].astype(str).fillna('')
+
+        if not summary_by_client_df.empty:
+            st.write("#### Spending Overview by Client")
+            st.dataframe(
+                summary_by_client_df[[
+                    'client_name', 'total_paid_to_client', 'total_spent_by_client', 'remaining_balance'
+                ]].style.format({
+                    'total_paid_to_client': "Rs. {:,.2f}",
+                    'total_spent_by_client': "Rs. {:,.2f}",
+                    'remaining_balance': "Rs. {:,.2f}"
+                }),
+                use_container_width=True,
+                hide_index=True
+            )
+
+            st.write("#### Detailed Client Expenses")
+            if not client_expenses_df_all.empty:
+                st.dataframe(
+                    client_expenses_df_all[[
+                        'expense_date', 'expense_person', 'expense_category', 'expense_amount', 'expense_description'
+                    ]].style.format({'expense_amount': "Rs. {:,.2f}"}),
+                    use_container_width=True,
+                    hide_index=True
+                )
+            else:
+                st.info("No detailed client expenses to display.")
+        else:
+            st.info("No client expenses or 'I Paid' transactions recorded yet.")
+    except Exception as e:
+        st.error(f"Error loading client expenses summary: {e}")
+
+with tab4:
     st.subheader("Manage People")
     with st.expander("Add New Person"):
         with st.form("person_form", clear_on_submit=True):
             c1, c2 = st.columns(2)
-            name = c1.text_input("Name").strip() # Strip whitespace from name
+            name = c1.text_input("Name").strip()
             category = c2.selectbox("Category", ["investor", "client"])
             if st.form_submit_button("Add Person"):
-                if not name: # Check if name is empty after stripping
+                if not name:
                     st.warning("Name is required.")
                 else:
                     try:
                         if not os.path.exists(PEOPLE_FILE):
                             pd.DataFrame(columns=["name", "category"]).to_csv(PEOPLE_FILE, index=False)
 
-                        df_people = pd.read_csv(PEOPLE_FILE) # Renamed to avoid conflict with transaction df
-                        # Convert 'name' column to string for consistent comparison
-                        df_people['name'] = df_people['name'].astype(str)
-                        if name.lower() in df_people['name'].str.lower().values: # Case-insensitive check
+                        df = pd.read_csv(PEOPLE_FILE)
+                        df['name'] = df['name'].astype(str)
+                        if name.lower() in df['name'].str.lower().values:
                             st.warning(f"Person '{name}' already exists.")
                         else:
                             pd.DataFrame([[name, category]], columns=["name", "category"])\
@@ -1669,13 +2008,11 @@ with tab3:
             if not ppl.empty:
                 st.dataframe(ppl, use_container_width=True, hide_index=True)
                 
-                # Ensure selectbox defaults gracefully if no people are present
                 if not ppl['name'].empty:
                     to_del = st.selectbox("Delete Person", ppl['name'].astype(str).tolist(), key='delete_person_select')
                     if st.button("Delete", key='delete_person_button'):
                         try:
                             tx = pd.read_csv(CSV_FILE)
-                            # Ensure 'person' column in transactions is string for comparison
                             tx['person'] = tx['person'].astype(str)
                             if to_del in tx['person'].values:
                                 st.error(f"Cannot delete '{to_del}'. There are transactions associated with this person.")
@@ -1695,170 +2032,16 @@ with tab3:
     except Exception as e:
         st.error(f"Error managing people: {e}")
 
-# ------------------ Tab 4: Generate Invoice ------------------
-with tab4:
-    st.subheader("Generate Invoice")
-
-    # Informational message for the user
-    st.info("💡 Please make all your selections (Person, Invoice Type, and Date Range if applicable) before clicking 'Generate Invoice'. The form elements update dynamically as you change the 'Invoice Type' selection.")
-
-    try:
-        people_df = pd.read_csv(PEOPLE_FILE)
-        invoice_person_options = ["Select a person..."] + sorted(people_df['name'].astype(str).tolist())
-    except Exception as e:
-        st.error(f"Error loading people data for invoice: {e}")
-        invoice_person_options = ["Select a person..."]
-
-    # Ensure selected person for invoice is valid or reset
-    if st.session_state['invoice_person_name'] not in invoice_person_options:
-        st.session_state['invoice_person_name'] = "Select a person..."
-
-    current_invoice_person_index = invoice_person_options.index(st.session_state['invoice_person_name'])
-
-    # These elements are now outside the form for real-time reactivity
-    st.session_state['invoice_person_name'] = st.selectbox(
-        "Select Person for Invoice",
-        invoice_person_options,
-        index=current_invoice_person_index,
-        key='invoice_person_select'
-    )
-
-    st.session_state['invoice_type'] = st.radio(
-        "Invoice Type",
-        ["Invoice for Person (All Transactions)", "Invoice for Specific Date Range"], # Removed "Invoice for Selected Transactions"
-        horizontal=True,
-        key='invoice_type_radio'
-    )
-
-    # Conditional display for date ranges based on invoice type
-    if st.session_state['invoice_type'] == "Invoice for Specific Date Range":
-        col_inv_date1, col_inv_date2 = st.columns(2)
-        with col_inv_date1:
-            st.session_state['invoice_start_date'] = st.date_input(
-                "Start Date",
-                value=st.session_state['invoice_start_date'],
-                key='invoice_start_date_input'
-            )
-        with col_inv_date2:
-            st.session_state['invoice_end_date'] = st.date_input(
-                "End Date",
-                value=st.session_state['invoice_end_date'],
-                key='invoice_end_date_input'
-            )
-    
-    # The actual form for submission
-    with st.form("invoice_generation_submit_form"):
-        # The entire block for "Invoice for Selected Transactions" is removed from here
-        
-        generate_invoice_button = st.form_submit_button("Generate Invoice")
-
-        if generate_invoice_button:
-            # When the button is clicked, reset the download button visibility
-            st.session_state['show_download_button'] = False
-            st.session_state['generated_invoice_pdf_path'] = None
-
-            if st.session_state['invoice_person_name'] == "Select a person...":
-                st.warning("Please select a person to generate the invoice.")
-            # Removed the 'elif st.session_state['invoice_type'] == "Invoice for Selected Transactions":' block
-            else: # Now this 'else' covers both "All Transactions" and "Specific Date Range"
-                try:
-                    all_transactions_df = pd.read_csv(CSV_FILE, dtype={'reference_number': str}, keep_default_na=False)
-                    all_transactions_df['reference_number'] = all_transactions_df['reference_number'].apply(
-                        lambda x: '' if pd.isna(x) or str(x).strip().lower() == 'nan' or str(x).strip().lower() == 'none' else str(x).strip()
-                    )
-                    all_transactions_df = clean_payments_data(all_transactions_df) # Ensure data is clean (dates are datetime objects)
-
-                    # Filter by person
-                    person_transactions_df = all_transactions_df[all_transactions_df['person'] == st.session_state['invoice_person_name']].copy()
-                    
-                    # Prepare for display (adds 'type_display', 'amount_display', etc.) - important for PDF content
-                    person_transactions_df['original_index'] = person_transactions_df.index # Add original_index before preparing
-                    person_transactions_df = prepare_dataframe_for_display(person_transactions_df)
-
-                    filtered_invoice_transactions = pd.DataFrame() # Initialize empty DataFrame
-
-                    invoice_type_for_filename = "" # For meaningful filename
-                    if st.session_state['invoice_type'] == "Invoice for Person (All Transactions)":
-                        filtered_invoice_transactions = person_transactions_df
-                        invoice_type_for_filename = "all_transactions"
-                    elif st.session_state['invoice_type'] == "Invoice for Specific Date Range":
-                        start_date_obj = st.session_state['invoice_start_date']
-                        end_date_obj = st.session_state['invoice_end_date']
-                        
-                        # Filter by date range using the 'date_parsed' (datetime) column
-                        filtered_invoice_transactions = person_transactions_df[
-                            (person_transactions_df['date_parsed'].dt.date >= start_date_obj) &
-                            (person_transactions_df['date_parsed'].dt.date <= end_date_obj)
-                        ]
-                        invoice_type_for_filename = "specific_date_range"
-                    
-                    # Check if there are any transactions to invoice for these types
-                    if filtered_invoice_transactions.empty:
-                        st.warning("No transactions found for the selected person and criteria to generate an invoice.")
-                    else:
-                        # Generate PDF using FPDF
-                        pdf_file_path = generate_invoice_pdf(
-                            st.session_state['invoice_person_name'],
-                            filtered_invoice_transactions,
-                            invoice_type_for_filename, # Pass for filename logic
-                            st.session_state['invoice_start_date'],
-                            st.session_state['invoice_end_date']
-                        )
-                        
-                        st.session_state['generated_invoice_pdf_path'] = pdf_file_path
-
-                        if pdf_file_path:
-                            st.success(f"Invoice generated successfully for {st.session_state['invoice_person_name']}!")
-                            st.session_state['show_download_button'] = True # Set flag to show download button
-                            git_push() # Push the new invoice file to GitHub
-                        else:
-                            st.error("Failed to generate PDF invoice.")
-                        
-                except Exception as e:
-                    st.error(f"Error generating invoice: {e}")
-
-
-    # Display generated invoice download button and clear button
-    if st.session_state['show_download_button'] and st.session_state['generated_invoice_pdf_path']:
-        st.markdown("---")
-        st.subheader("Download Your Invoice")
-        
-        # --- Debugging UI display of filename ---
-        st.write(f"Intended Download Filename: `{os.path.basename(st.session_state['generated_invoice_pdf_path'])}`")
-        # --- End debugging UI display ---
-
-        col_download, col_clear = st.columns([0.7, 0.3])
-        with col_download:
-            with open(st.session_state['generated_invoice_pdf_path'], "rb") as file:
-                st.download_button(
-                    label="Download Invoice PDF",
-                    data=file,
-                    file_name=os.path.basename(st.session_state['generated_invoice_pdf_path']),
-                    mime="application/pdf",
-                    key='download_invoice_pdf_button' # Unique key for the button
-                )
-        with col_clear:
-            if st.button("Clear Invoice", key='clear_invoice_button'):
-                st.session_state['generated_invoice_pdf_path'] = None
-                st.session_state['show_download_button'] = False
-                st.rerun() # Rerun to hide the download button
-
-        st.info("Your PDF invoice has been generated and is ready for download. You can open it with any PDF viewer.")
-
-
-# ------------------ Sidebar: Balances ------------------
 st.sidebar.header("Current Balances")
 try:
     if os.path.exists(CSV_FILE):
-        df_bal = pd.read_csv(CSV_FILE, dtype={'reference_number': str}, keep_default_na=False) # Apply dtype fix here too
+        df_bal = pd.read_csv(CSV_FILE, dtype={'reference_number': str}, keep_default_na=False)
         df_bal['reference_number'] = df_bal['reference_number'].apply(
             lambda x: '' if pd.isna(x) or str(x).strip().lower() == 'nan' or str(x).strip().lower() == 'none' else str(x).strip()
         )
-        # Apply clean_payments_data to ensure dates are datetime objects and other columns are clean
         df_bal = clean_payments_data(df_bal)
 
         if not df_bal.empty:
-            # Ensure columns are treated as strings and amounts as numeric for calculations
             df_bal['amount'] = pd.to_numeric(df_bal['amount'], errors='coerce').fillna(0.0)
             df_bal['type'] = df_bal['type'].astype(str).str.lower()
             df_bal['payment_method'] = df_bal['payment_method'].astype(str).str.lower()
