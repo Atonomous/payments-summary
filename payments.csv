@@ -5,3 +5,4 @@ date,person,amount,type,status,description,payment_method,reference_number,chequ
 2025-07-29,Rizwan,2800.0,paid_to_me,completed,FirstAgain,cash,00000000012,,completed
 2025-07-29,Zohaib,2800.0,i_paid,completed,FirstAgain99,cheque,75487547213756,received/given,completed
 2025-07-29,Rizwan,2000.0,paid_to_me,completed,2RupeePeople,cash,231754874854,,completed
+2025-07-29,Shabbir,2000.0,i_paid,completed,Nohing,cash,12002120,,completed
