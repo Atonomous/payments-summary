@@ -20,7 +20,9 @@ def init_state():
         'temp_edit_data', 'invoice_person_name', 'invoice_type', 'invoice_start_date', 'invoice_end_date',
         'generated_invoice_pdf_path', 'show_download_button',
         'invoice_selected_transactions_start_date', 'invoice_selected_transactions_end_date', # New for selected transactions
-        'invoice_transactions_table_selection' # To store selected rows from dataframe
+        'invoice_transactions_table_selection', # To store selected rows from dataframe
+        'view_person_filter', # New for View Transactions tab
+        'view_reference_number_search' # New for View Transactions tab
     ]
     defaults = {
         'selected_transaction_type': 'Paid to Me',
@@ -43,7 +45,9 @@ def init_state():
         'show_download_button': False, # Default to not showing the download button
         'invoice_selected_transactions_start_date': None, # Default for new invoice date filter
         'invoice_selected_transactions_end_date': None, # Default for new invoice date filter
-        'invoice_transactions_table_selection': {'added_rows': [], 'edited_rows': {}, 'deleted_rows': [], 'selected_rows': []} # Default for dataframe selection
+        'invoice_transactions_table_selection': {'added_rows': [], 'edited_rows': {}, 'deleted_rows': [], 'selected_rows': []}, # Default for dataframe selection
+        'view_person_filter': "All", # Default for new person filter
+        'view_reference_number_search': "" # Default for new reference number search
     }
     for k in keys:
         if k not in st.session_state:
@@ -477,7 +481,8 @@ def generate_html_summary(df):
             color: #555;
         }}
         .filter-group select,
-        .filter-group input[type="date"] {{
+        .filter-group input[type="date"],
+        .filter-group input[type="text"] {{
             width: 100%;
             padding: 10px 12px;
             border: 1px solid #ddd;
@@ -489,7 +494,8 @@ def generate_html_summary(df):
             background-color: #fff;
         }}
         .filter-group select:focus,
-        .filter-group input[type="date"]:focus {{
+        .filter-group input[type="date"]:focus,
+        .filter-group input[type="text"]:focus {{
             border-color: #007bff;
             box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.15);
             outline: none;
@@ -678,6 +684,7 @@ def generate_html_summary(df):
             const type = $('#type-filter').val();
             const method = $('#method-filter').val().toLowerCase();
             const chequeStatus = $('#status-filter').val().toLowerCase();
+            const referenceNumber = $('#reference-number-filter').val().toLowerCase(); // New filter
 
             console.log("--- Applying Filters ---");
             console.log("Start Date:", startDate);
@@ -686,6 +693,7 @@ def generate_html_summary(df):
             console.log("Type Filter:", type);
             console.log("Method Filter:", method);
             console.log("Cheque Status Filter:", chequeStatus);
+            console.log("Reference Number Filter:", referenceNumber); // Log new filter
 
             let visibleRows = 0;
 
@@ -695,8 +703,9 @@ def generate_html_summary(df):
                 const rowType = $(this).data('type');
                 const rowMethod = $(this).data('method').toString().toLowerCase();
                 const rowChequeStatus = $(this).data('cheque-status').toString().toLowerCase();
+                const rowReferenceNumber = $(this).data('reference-number').toString().toLowerCase(); // Get new data attribute
 
-                console.log("Processing Row:", {{ rowDate, rowPerson, rowType, rowMethod, rowChequeStatus }});
+                console.log("Processing Row:", {{ rowDate, rowPerson, rowType, rowMethod, rowChequeStatus, rowReferenceNumber }});
 
                 // Date filter: Compare YYYY-MM-DD strings directly
                 const datePass = (!startDate || rowDate >= startDate) && (!endDate || rowDate <= endDate);
@@ -713,8 +722,12 @@ def generate_html_summary(df):
                 // Cheque status filter
                 const chequeStatusPass = !chequeStatus ||
                                       (rowChequeStatus && rowChequeStatus.includes(chequeStatus));
+                
+                // Reference Number filter (new)
+                const referenceNumberPass = !referenceNumber || rowReferenceNumber.includes(referenceNumber);
 
-                if (datePass && personPass && typePass && methodPass && chequeStatusPass) {{
+
+                if (datePass && personPass && typePass && methodPass && chequeStatusPass && referenceNumberPass) {{
                     $(this).show();
                     visibleRows++;
                     console.log("Row PASSED filters.");
@@ -743,6 +756,7 @@ def generate_html_summary(df):
             $('#type-filter').val('');
             $('#method-filter').val('');
             $('#status-filter').val('');
+            $('#reference-number-filter').val(''); // Reset new filter
 
             // Reset date inputs to default range
             const today = new Date();
@@ -872,6 +886,11 @@ def generate_html_summary(df):
                         <option value="processing done">Processing Done</option>
                     </select>
                 </div>
+                
+                <div class="filter-group">
+                    <label for="reference-number-filter">Reference Number</label>
+                    <input type="text" id="reference-number-filter" placeholder="Search by reference number">
+                </div>
             </div>
 
             <div class="filter-actions">
@@ -918,6 +937,7 @@ def generate_html_summary(df):
             row_type = str(row['type'])
             row_method = str(row['payment_method']).lower()
             row_cheque_status = str(row['cheque_status']).lower() if str(row['cheque_status']).strip() != '' else ''
+            row_reference_number = str(row['reference_number']).lower() if str(row['reference_number']).strip() != '' else '' # New data attribute
 
             # Use the _display columns for visible content
             cheque_status_class = str(transactions_display.loc[idx, 'cheque_status_display']).lower().replace(' ', '-').replace('/', '-') if transactions_display.loc[idx, 'cheque_status_display'] != '-' else ''
@@ -928,7 +948,8 @@ def generate_html_summary(df):
                     data-person="{row_person}"
                     data-type="{row_type}"
                     data-method="{row_method}"
-                    data-cheque-status="{row_cheque_status}">
+                    data-cheque-status="{row_cheque_status}"
+                    data-reference-number="{row_reference_number}"> <!-- New data attribute -->
                     <td>{transactions_display.loc[idx, 'formatted_date']}</td>
                     <td>{transactions_display.loc[idx, 'person']}</td>
                     <td>{transactions_display.loc[idx, 'amount_display']}</td>
@@ -1045,17 +1066,21 @@ def generate_invoice_pdf(person_name, transactions_df, invoice_type_display, sta
         # Transaction Table Header
         pdf.set_fill_color(233, 236, 239) # Light grey background for header
         pdf.set_text_color(73, 80, 87) # Darker grey for header text
-        pdf.set_font("Arial", "B", size=10)
+        pdf.set_font("Arial", "B", size=8) # Reduced font size for more columns
         
-        col_widths = [30, 90, 30, 40] # Date, Description, Type, Amount
+        # Adjusted column widths for new columns
+        col_widths = [20, 45, 20, 20, 20, 25, 40] # Date, Description, Type, Method, Cheque Status, Reference No., Amount
 
         pdf.cell(col_widths[0], 10, "Date", 1, 0, 'L', 1)
         pdf.cell(col_widths[1], 10, "Description", 1, 0, 'L', 1)
         pdf.cell(col_widths[2], 10, "Type", 1, 0, 'L', 1)
-        pdf.cell(col_widths[3], 10, "Amount", 1, 1, 'R', 1) # ln=1 moves to next line
+        pdf.cell(col_widths[3], 10, "Method", 1, 0, 'L', 1) # New column
+        pdf.cell(col_widths[4], 10, "Chq. Status", 1, 0, 'L', 1) # New column
+        pdf.cell(col_widths[5], 10, "Ref. No.", 1, 0, 'L', 1) # New column
+        pdf.cell(col_widths[6], 10, "Amount", 1, 1, 'R', 1) # ln=1 moves to next line
 
         # Transaction Table Rows
-        pdf.set_font("Arial", size=10)
+        pdf.set_font("Arial", size=8) # Reduced font size for rows
         pdf.set_text_color(51, 51, 51) # Black for body text
         total_amount = 0.0
 
@@ -1074,9 +1099,13 @@ def generate_invoice_pdf(person_name, transactions_df, invoice_type_display, sta
                 pdf.cell(col_widths[0], 10, str(row['formatted_date']), 1, 0, 'L', 1)
                 pdf.cell(col_widths[1], 10, str(row['description'] if row['description'] else '-'), 1, 0, 'L', 1)
                 pdf.cell(col_widths[2], 10, str(row['type_display']), 1, 0, 'L', 1)
-                pdf.cell(col_widths[3], 10, f"Rs. {row['amount']:,.2f}", 1, 1, 'R', 1)
+                pdf.cell(col_widths[3], 10, str(row['payment_method']).capitalize(), 1, 0, 'L', 1) # New
+                pdf.cell(col_widths[4], 10, str(row['cheque_status_display']), 1, 0, 'L', 1) # New
+                pdf.cell(col_widths[5], 10, str(row['reference_number_display']), 1, 0, 'L', 1) # New
+                pdf.cell(col_widths[6], 10, f"Rs. {row['amount']:,.2f}", 1, 1, 'R', 1)
         else:
             pdf.set_fill_color(255, 255, 255) # White background for no transactions message
+            # Adjust cell width to span all columns
             pdf.cell(sum(col_widths), 20, "No transactions found for the selected criteria.", 1, 1, 'C', 1)
 
         pdf.ln(10)
@@ -1084,8 +1113,9 @@ def generate_invoice_pdf(person_name, transactions_df, invoice_type_display, sta
         # Total Amount Summary
         pdf.set_font("Arial", "B", size=14)
         pdf.set_text_color(0, 123, 255) # Blue for total
-        pdf.cell(sum(col_widths) - col_widths[3], 10, "Total Amount:", 0, 0, 'R')
-        pdf.cell(col_widths[3], 10, f"Rs. {total_amount:,.2f}", 0, 1, 'R')
+        # Adjust total cell width to align with the amount column
+        pdf.cell(sum(col_widths) - col_widths[6], 10, "Total Amount:", 0, 0, 'R')
+        pdf.cell(col_widths[6], 10, f"Rs. {total_amount:,.2f}", 0, 1, 'R')
         pdf.ln(20)
 
         # Save PDF
@@ -1304,13 +1334,35 @@ with tab2:
         temp_filtered_df = df.copy()
 
         # Filters (apply filters on the original columns, then display with _display columns)
-        col1, col2, col3 = st.columns(3)
+        col1, col2, col3, col4 = st.columns(4) # Added a column for new filters
         with col1:
             view_filter = st.radio("Filter by Type", ["All", "Received", "Paid"], horizontal=True, key='view_filter_radio')
         with col2:
             method_filter = st.selectbox("Payment Method", ["All", "Cash", "Cheque"], key='method_filter_select')
         with col3:
             status_filter = st.selectbox("Status", ["All", "Completed", "Pending", "Received/Given", "Processing", "Bounced", "Processing Done"], key='status_filter_select')
+        
+        # New filters for View Transactions tab
+        try:
+            people_df_view = pd.read_csv(PEOPLE_FILE)
+            person_options_view = ["All"] + sorted(people_df_view['name'].astype(str).tolist())
+        except Exception as e:
+            st.error(f"Error loading people data for view filter: {e}")
+            person_options_view = ["All"]
+
+        with col4: # New column for person filter
+            st.session_state['view_person_filter'] = st.selectbox(
+                "Filter by Person",
+                person_options_view,
+                key='view_person_filter_select'
+            )
+        
+        st.session_state['view_reference_number_search'] = st.text_input(
+            "Search by Reference Number",
+            value=st.session_state['view_reference_number_search'],
+            key='view_reference_number_search_input',
+            placeholder="Enter reference number..."
+        )
 
         # Apply filters to the original columns for accurate filtering logic
         if view_filter != "All":
@@ -1322,6 +1374,17 @@ with tab2:
                 temp_filtered_df = temp_filtered_df[temp_filtered_df['transaction_status'].astype(str).str.lower() == status_filter.lower()]
             elif status_filter.lower() in valid_cheque_statuses_lower: # Check if it's a cheque specific status
                 temp_filtered_df = temp_filtered_df[temp_filtered_df['cheque_status'].astype(str).str.lower() == status_filter.lower()]
+        
+        # Apply new person filter
+        if st.session_state['view_person_filter'] != "All":
+            temp_filtered_df = temp_filtered_df[temp_filtered_df['person'] == st.session_state['view_person_filter']]
+
+        # Apply new reference number search filter
+        if st.session_state['view_reference_number_search']:
+            search_term = st.session_state['view_reference_number_search'].lower()
+            temp_filtered_df = temp_filtered_df[
+                temp_filtered_df['reference_number'].astype(str).str.lower().str.contains(search_term)
+            ]
 
 
         # Now apply the display preparation to the filtered data
@@ -1396,18 +1459,21 @@ with tab2:
                 with col1_edit:
                     edited_amount = st.number_input("Amount (Rs.)", value=float(edit_data.get('amount', 0.0)), format="%.2f", key='edit_amount')
 
-                    # Ensure date is a datetime.date object for date_input
-                    try:
-                        default_date_value = edit_data.get('date')
-                        if isinstance(default_date_value, pd.Timestamp):
-                            default_date_value = default_date_value.date()
-                        elif isinstance(default_date_value, str):
+                    # --- FIX START: Robust Date Handling for st.date_input ---
+                    default_date_value = edit_data.get('date')
+                    if pd.isna(default_date_value): # Check for pandas NaT or numpy NaN
+                        default_date_value = None # Explicitly set to None for st.date_input
+                    elif isinstance(default_date_value, pd.Timestamp):
+                        default_date_value = default_date_value.date() # Convert Timestamp to date object
+                    elif isinstance(default_date_value, str):
+                        try:
                             default_date_value = datetime.strptime(default_date_value, "%Y-%m-%d").date()
-                        else: # Fallback for None or other unexpected types
-                            default_date_value = datetime.now().date()
-                    except (ValueError, TypeError):
-                        default_date_value = datetime.now().date()
+                        except ValueError:
+                            default_date_value = None # Handle invalid date strings
+                    # No 'else' fallback to datetime.now().date() if it's truly meant to be empty
+                    
                     edited_date = st.date_input("Date", value=default_date_value, key='edit_date')
+                    # --- FIX END: Robust Date Handling for st.date_input ---
 
                     edited_payment_method = st.radio(
                         "Payment Method",
@@ -1500,7 +1566,9 @@ with tab2:
                     if validation_passed:
                         try:
                             df.loc[st.session_state['editing_row_idx']] = {
-                                "date": edited_date.strftime("%Y-%m-%d"), # Store date as string YYYY-MM-DD
+                                # --- FIX START: Save edited_date gracefully ---
+                                "date": edited_date.strftime("%Y-%m-%d") if edited_date else None, # Store date as string YYYY-MM-DD or None
+                                # --- FIX END: Save edited_date gracefully ---
                                 "person": edited_person,
                                 "amount": edited_amount,
                                 "type": edit_data['type'], # Keep original type
@@ -1878,3 +1946,4 @@ try:
         st.sidebar.info("Transaction database not found. Add a transaction to create it.")
 except Exception as e:
     st.sidebar.error(f"Error loading balances: {str(e)}")
+
