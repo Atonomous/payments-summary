@@ -17,3 +17,4 @@ date,person,amount,type,status,description,payment_method,reference_number,chequ
 2025-07-01,Butt Fitness,1000000.0,i_paid,completed,Meezan Bank,cash,416723,,completed
 2025-07-08,Butt Fitness,500000.0,i_paid,completed,Meezan Bank,cash,842448,,completed
 2025-07-09,Butt Fitness,400000.0,i_paid,completed,Bank Alfa,cash,#FT251910XXPTDWXQ,,completed
+2025-07-25,Butt Fitness,200000.0,i_paid,completed,Meezan Bank,cash,411625,,completed
