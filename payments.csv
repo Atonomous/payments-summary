@@ -42,3 +42,4 @@ date,person,amount,type,status,description,payment_method,reference_number,chequ
 2025-06-02,Barkat Trading Corporation,5000000.0,i_paid,completed,52372188,cash,invoice - 386621,,completed
 2025-06-12,Rehmat Lawn Mover,5000000.0,i_paid,completed,Faysal Bank,cash,CA0000000012,,completed
 2025-06-14,Rehmat Lawn Mover,8000000.0,i_paid,completed,Faysal Bank,cash,CA0000000015,,completed
+2025-06-16,Rehmat Lawn Mover,8000000.0,i_paid,completed,Faysal Bank,cash,CA0000000016,,completed
