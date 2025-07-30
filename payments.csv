@@ -47,4 +47,4 @@ date,person,amount,type,status,description,payment_method,reference_number,chequ
 2025-06-26,Barkat Trading Corporation,6000000.0,i_paid,completed,Faysal Bank,cheque,CA0000000019,processing done,completed
 2025-06-27,Barkat Trading Corporation,4000000.0,i_paid,completed,Faysal Bank,cash,CA00000000021,,completed
 2025-07-01,Barkat Trading Corporation,4950000.0,i_paid,completed,Faysal Bank,cheque,CA0000000020,processing done,completed
-2025-07-18,Barkat Trading Corporation,2500000.0,i_paid,completed,Faysal Bank,cheque,0000000,processing done,completed
+2025-07-18,Barkat Trading Corporation,2500000.0,i_paid,completed,Faysal Bank,cheque,0000,processing done,completed

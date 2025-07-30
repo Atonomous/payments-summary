@@ -443,6 +443,7 @@
             td:nth-of-type(5):before { content: "Quantity"; } /* New media query label */
             td:nth-of-type(6):before { content: "Total Line Amount"; } /* New media query label */
             .detailed-expenses-table td:nth-of-type(7):before { content: "Description"; }
+            .detailed-expenses-table td:nth-of-type(8):before { content: "Ref. Num."; } /* New media query label */
         }
 
         @media print {
@@ -509,8 +510,12 @@
             oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
             $('#start-date').val(oneMonthAgo.toISOString().split('T')[0]);
             $('#end-date').val(today.toISOString().split('T')[0]);
+            $('#client-expense-start-date').val(oneMonthAgo.toISOString().split('T')[0]);
+            $('#client-expense-end-date').val(today.toISOString().split('T')[0]);
+
 
             applyFilters();
+            applyClientExpenseFilters(); // Apply filters for client expenses on load
 
             $('.tab-button').on('click', function() {
                 const tabId = $(this).data('tab');
@@ -521,6 +526,25 @@
             });
 
             $('.tab-button[data-tab="transactions-tab"]').click();
+
+            // Attach event listeners for client expense filters
+            $('#client-expense-start-date, #client-expense-end-date, #client-expense-person-filter, #client-expense-category-filter, #client-expense-ref-num-filter').on('change keyup', function() {
+                applyClientExpenseFilters();
+            });
+            $('#apply-client-expense-filters').on('click', function() {
+                applyClientExpenseFilters();
+            });
+            $('#reset-client-expense-filters').on('click', function() {
+                const today = new Date();
+                const oneMonthAgo = new Date();
+                oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+                $('#client-expense-start-date').val(oneMonthAgo.toISOString().split('T')[0]);
+                $('#client-expense-end-date').val(today.toISOString().split('T')[0]);
+                $('#client-expense-person-filter').val('');
+                $('#client-expense-category-filter').val('');
+                $('#client-expense-ref-num-filter').val('');
+                applyClientExpenseFilters();
+            });
         });
 
         function applyFilters() {
@@ -587,6 +611,48 @@
             applyFilters(); // Re-apply filters after resetting
         }
 
+        function applyClientExpenseFilters() {
+            const startDate = $('#client-expense-start-date').val();
+            const endDate = $('#client-expense-end-date').val();
+            const client = $('#client-expense-person-filter').val().toLowerCase();
+            const category = $('#client-expense-category-filter').val().toLowerCase();
+            const refNum = $('#client-expense-ref-num-filter').val().toLowerCase();
+
+            let visibleRows = 0;
+            let totalAmount = 0;
+
+            $('#detailed-expenses-table tbody tr').each(function() {
+                const rowDate = $(this).data('date');
+                const rowClient = $(this).data('client').toString().toLowerCase();
+                const rowCategory = $(this).data('category').toString().toLowerCase();
+                const rowRefNum = $(this).data('ref-num').toString().toLowerCase();
+                const rowAmount = parseFloat($(this).find('td[data-amount-raw]').data('amount-raw'));
+
+                const datePass = (!startDate || rowDate >= startDate) && (!endDate || rowDate <= endDate);
+                const clientPass = !client || rowClient.includes(client);
+                const categoryPass = !category || rowCategory.includes(category);
+                const refNumPass = !refNum || rowRefNum.includes(refNum);
+
+                if (datePass && clientPass && categoryPass && refNumPass) {
+                    $(this).show();
+                    visibleRows++;
+                    totalAmount += rowAmount;
+                } else {
+                    $(this).hide();
+                }
+            });
+
+            $('#total-client-expenses-display').text('Rs. ' + totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+
+            if (visibleRows === 0) {
+                $('#no-client-expense-results').show();
+                $('#detailed-expenses-table').hide();
+            } else {
+                $('#no-client-expense-results').hide();
+                $('#detailed-expenses-table').show();
+            }
+        }
+
         function downloadPdf() {
             window.print();
         }
@@ -600,7 +666,7 @@
             </div>
             <h1 class="report-title">Payment Summary Report</h1>
             <div class="report-date">
-                <i class="far fa-calendar-alt"></i> July 30, 2025 at 05:09 AM
+                <i class="far fa-calendar-alt"></i> July 30, 2025 at 05:15 AM
             </div>
         </header>
 
@@ -1583,7 +1649,7 @@
                                 data-type="i_paid"
                                 data-method="cheque"
                                 data-cheque-status="processing done"
-                                data-reference-number="0000000"
+                                data-reference-number="0000"
                                 data-amount-raw="2500000.0">
                                 <td>2025-07-18</td>
                                 <td>Barkat Trading Corporation</td>
@@ -1591,7 +1657,7 @@
                                 <td>Paid</td>
                                 <td>Cheque</td>
                                 <td><span class="status processing-done">Processing done</span></td>
-                                <td>0000000</td>
+                                <td>0000</td>
                                 <td><span class="status completed">Completed</span></td>
                                 <td>Faysal Bank</td>
                             </tr>
@@ -1608,6 +1674,43 @@
                     <h2 class="section-title">
                         <i class="fas fa-money-check-alt"></i> Client Expenses Overview
                     </h2>
+
+                    <div class="filters">
+                        <h3 class="section-subtitle"><i class="fas fa-filter"></i> Client Expense Filters</h3>
+                        <div class="filter-grid">
+                            <div class="filter-group">
+                                <label for="client-expense-start-date">Expense Date Range</label>
+                                <input type="date" id="client-expense-start-date" class="date-filter">
+                                <span style="display: inline-block; margin: 0 5px; font-size: 12px;">to</span>
+                                <input type="date" id="client-expense-end-date" class="date-filter">
+                            </div>
+                            <div class="filter-group">
+                                <label for="client-expense-person-filter">Client Name</label>
+                                <select id="client-expense-person-filter">
+                                    <option value="">All</option><option value="Barkat Trading Corporation">Barkat Trading Corporation</option><option value="Butt Fitness">Butt Fitness</option>
+                                </select>
+                            </div>
+                            <div class="filter-group">
+                                <label for="client-expense-category-filter">Category</label>
+                                <select id="client-expense-category-filter">
+                                    <option value="">All</option><option value="General">General</option><option value="Salaries">Salaries</option><option value="Rent">Rent</option><option value="Utilities">Utilities</option><option value="Supplies">Supplies</option><option value="Travel">Travel</option><option value="Other">Other</option>
+                                </select>
+                            </div>
+                            <div class="filter-group">
+                                <label for="client-expense-ref-num-filter">Reference Number</label>
+                                <input type="text" id="client-expense-ref-num-filter" placeholder="Search by reference number">
+                            </div>
+                        </div>
+                        <div class="filter-actions">
+                            <button class="filter-btn" id="apply-client-expense-filters">
+                                <i class="fas fa-filter"></i> Apply Filters
+                            </button>
+                            <button class="filter-btn reset-btn" id="reset-client-expense-filters">
+                                <i class="fas fa-redo"></i> Reset
+                            </button>
+                        </div>
+                    </div>
+
                     
             <h3 class="section-subtitle"><i class="fas fa-chart-pie"></i> Spending Overview by Client</h3>
             <table class="client-summary-table">
@@ -1655,9 +1758,9 @@
                     
             <h3 class="section-subtitle"><i class="fas fa-list-alt"></i> Detailed Client Expenses</h3>
             <div style="text-align: right; margin-bottom: 10px; font-weight: bold; font-size: 1.2em; color: #34495e;">
-                Total Client Expenses: Rs. 58,926,427.60
+                Total Client Expenses: <span id="total-client-expenses-display">Rs. 58,926,427.60</span>
             </div>
-            <table class="detailed-expenses-table">
+            <table class="detailed-expenses-table" id="detailed-expenses-table">
                 <thead>
                     <tr>
                         <th>Date</th>
@@ -1667,212 +1770,297 @@
                         <th>Quantity</th>
                         <th>Total Line Amount</th>
                         <th>Description</th>
+                        <th>Ref. Num.</th>
                     </tr>
                 </thead>
                 <tbody>
             
-                    <tr>
+                    <tr data-date="2025-07-01"
+                        data-client="butt fitness"
+                        data-category="general"
+                        data-ref-num="">
                         <td>2025-07-01</td>
                         <td>Butt Fitness</td>
                         <td>General</td>
                         <td>Rs. 1,600,000.00</td>
-                        <td>13</td> <!-- Changed to .0f for integer quantity -->
-                        <td>Rs. 20,800,000.00</td>
+                        <td>13</td>
+                        <td data-amount-raw="20800000.0">Rs. 20,800,000.00</td>
                         <td>Gym Strength</td>
+                        <td>-</td>
                     </tr>
                 
-                    <tr>
+                    <tr data-date="2025-07-08"
+                        data-client="barkat trading corporation"
+                        data-category="general"
+                        data-ref-num="btc-386836/25">
                         <td>2025-07-08</td>
                         <td>Barkat Trading Corporation</td>
                         <td>General</td>
                         <td>Rs. 195,000.00</td>
-                        <td>1</td> <!-- Changed to .0f for integer quantity -->
-                        <td>Rs. 195,000.00</td>
+                        <td>1</td>
+                        <td data-amount-raw="195000.0">Rs. 195,000.00</td>
+                        <td>BTC-386836/25</td>
                         <td>BTC-386836/25</td>
                     </tr>
                 
-                    <tr>
+                    <tr data-date="2025-06-27"
+                        data-client="barkat trading corporation"
+                        data-category="general"
+                        data-ref-num="btc-38742/25">
                         <td>2025-06-27</td>
                         <td>Barkat Trading Corporation</td>
                         <td>General</td>
                         <td>Rs. 5,625,000.00</td>
-                        <td>1</td> <!-- Changed to .0f for integer quantity -->
-                        <td>Rs. 5,625,000.00</td>
+                        <td>1</td>
+                        <td data-amount-raw="5625000.0">Rs. 5,625,000.00</td>
+                        <td>BTC-38742/25</td>
                         <td>BTC-38742/25</td>
                     </tr>
                 
-                    <tr>
+                    <tr data-date="2025-06-27"
+                        data-client="barkat trading corporation"
+                        data-category="general"
+                        data-ref-num="btc-386741/25">
                         <td>2025-06-27</td>
                         <td>Barkat Trading Corporation</td>
                         <td>General</td>
                         <td>Rs. 487,500.00</td>
-                        <td>1</td> <!-- Changed to .0f for integer quantity -->
-                        <td>Rs. 487,500.00</td>
+                        <td>1</td>
+                        <td data-amount-raw="487500.0">Rs. 487,500.00</td>
+                        <td>BTC-386741/25</td>
                         <td>BTC-386741/25</td>
                     </tr>
                 
-                    <tr>
+                    <tr data-date="2025-05-30"
+                        data-client="barkat trading corporation"
+                        data-category="general"
+                        data-ref-num="btc-62548/25">
                         <td>2025-05-30</td>
                         <td>Barkat Trading Corporation</td>
                         <td>General</td>
                         <td>Rs. 2,933,000.00</td>
-                        <td>1</td> <!-- Changed to .0f for integer quantity -->
-                        <td>Rs. 2,933,000.00</td>
+                        <td>1</td>
+                        <td data-amount-raw="2933000.0">Rs. 2,933,000.00</td>
+                        <td>BTC-62548/25</td>
                         <td>BTC-62548/25</td>
                     </tr>
                 
-                    <tr>
+                    <tr data-date="2025-06-11"
+                        data-client="barkat trading corporation"
+                        data-category="general"
+                        data-ref-num="btc-62765/25">
                         <td>2025-06-11</td>
                         <td>Barkat Trading Corporation</td>
                         <td>General</td>
                         <td>Rs. 3,300,000.00</td>
-                        <td>1</td> <!-- Changed to .0f for integer quantity -->
-                        <td>Rs. 3,300,000.00</td>
+                        <td>1</td>
+                        <td data-amount-raw="3300000.0">Rs. 3,300,000.00</td>
+                        <td>BTC-62765/25</td>
                         <td>BTC-62765/25</td>
                     </tr>
                 
-                    <tr>
+                    <tr data-date="2025-06-10"
+                        data-client="barkat trading corporation"
+                        data-category="general"
+                        data-ref-num="386645/25">
                         <td>2025-06-10</td>
                         <td>Barkat Trading Corporation</td>
                         <td>General</td>
                         <td>Rs. 421,500.00</td>
-                        <td>1</td> <!-- Changed to .0f for integer quantity -->
-                        <td>Rs. 421,500.00</td>
+                        <td>1</td>
+                        <td data-amount-raw="421500.0">Rs. 421,500.00</td>
+                        <td>386645/25</td>
                         <td>386645/25</td>
                     </tr>
                 
-                    <tr>
+                    <tr data-date="2025-05-30"
+                        data-client="barkat trading corporation"
+                        data-category="general"
+                        data-ref-num="btc-62549/25">
                         <td>2025-05-30</td>
                         <td>Barkat Trading Corporation</td>
                         <td>General</td>
                         <td>Rs. 19,400.00</td>
-                        <td>1</td> <!-- Changed to .0f for integer quantity -->
-                        <td>Rs. 19,400.00</td>
+                        <td>1</td>
+                        <td data-amount-raw="19400.0">Rs. 19,400.00</td>
+                        <td>BTC-62549/25</td>
                         <td>BTC-62549/25</td>
                     </tr>
                 
-                    <tr>
+                    <tr data-date="2025-06-21"
+                        data-client="barkat trading corporation"
+                        data-category="general"
+                        data-ref-num="btc-386740/25">
                         <td>2025-06-21</td>
                         <td>Barkat Trading Corporation</td>
                         <td>General</td>
                         <td>Rs. 105,100.00</td>
-                        <td>1</td> <!-- Changed to .0f for integer quantity -->
-                        <td>Rs. 105,100.00</td>
+                        <td>1</td>
+                        <td data-amount-raw="105100.0">Rs. 105,100.00</td>
+                        <td>BTC-386740/25</td>
                         <td>BTC-386740/25</td>
                     </tr>
                 
-                    <tr>
+                    <tr data-date="2025-06-21"
+                        data-client="barkat trading corporation"
+                        data-category="general"
+                        data-ref-num="btc-386718/25">
                         <td>2025-06-21</td>
                         <td>Barkat Trading Corporation</td>
                         <td>General</td>
                         <td>Rs. 368,000.00</td>
-                        <td>1</td> <!-- Changed to .0f for integer quantity -->
-                        <td>Rs. 368,000.00</td>
+                        <td>1</td>
+                        <td data-amount-raw="368000.0">Rs. 368,000.00</td>
+                        <td>BTC-386718/25</td>
                         <td>BTC-386718/25</td>
                     </tr>
                 
-                    <tr>
+                    <tr data-date="2025-06-20"
+                        data-client="barkat trading corporation"
+                        data-category="general"
+                        data-ref-num="btc-62905/25">
                         <td>2025-06-20</td>
                         <td>Barkat Trading Corporation</td>
                         <td>General</td>
                         <td>Rs. 1,705,000.00</td>
-                        <td>1</td> <!-- Changed to .0f for integer quantity -->
-                        <td>Rs. 1,705,000.00</td>
+                        <td>1</td>
+                        <td data-amount-raw="1705000.0">Rs. 1,705,000.00</td>
+                        <td>BTC-62905/25</td>
                         <td>BTC-62905/25</td>
                     </tr>
                 
-                    <tr>
+                    <tr data-date="2025-06-19"
+                        data-client="barkat trading corporation"
+                        data-category="general"
+                        data-ref-num="# 386735/25">
                         <td>2025-06-19</td>
                         <td>Barkat Trading Corporation</td>
                         <td>General</td>
                         <td>Rs. 1,051,000.00</td>
-                        <td>1</td> <!-- Changed to .0f for integer quantity -->
-                        <td>Rs. 1,051,000.00</td>
+                        <td>1</td>
+                        <td data-amount-raw="1051000.0">Rs. 1,051,000.00</td>
+                        <td># 386735/25</td>
                         <td># 386735/25</td>
                     </tr>
                 
-                    <tr>
+                    <tr data-date="2025-06-19"
+                        data-client="barkat trading corporation"
+                        data-category="general"
+                        data-ref-num="#386715/25">
                         <td>2025-06-19</td>
                         <td>Barkat Trading Corporation</td>
                         <td>General</td>
                         <td>Rs. 325,000.00</td>
-                        <td>1</td> <!-- Changed to .0f for integer quantity -->
-                        <td>Rs. 325,000.00</td>
+                        <td>1</td>
+                        <td data-amount-raw="325000.0">Rs. 325,000.00</td>
+                        <td>#386715/25</td>
                         <td>#386715/25</td>
                     </tr>
                 
-                    <tr>
+                    <tr data-date="2025-06-16"
+                        data-client="barkat trading corporation"
+                        data-category="general"
+                        data-ref-num="btc-62819/25">
                         <td>2025-06-16</td>
                         <td>Barkat Trading Corporation</td>
                         <td>General</td>
                         <td>Rs. 134,000.00</td>
-                        <td>1</td> <!-- Changed to .0f for integer quantity -->
-                        <td>Rs. 134,000.00</td>
+                        <td>1</td>
+                        <td data-amount-raw="134000.0">Rs. 134,000.00</td>
+                        <td>BTC-62819/25</td>
                         <td>BTC-62819/25</td>
                     </tr>
                 
-                    <tr>
+                    <tr data-date="2025-06-16"
+                        data-client="barkat trading corporation"
+                        data-category="general"
+                        data-ref-num="btc-62815/25">
                         <td>2025-06-16</td>
                         <td>Barkat Trading Corporation</td>
                         <td>General</td>
                         <td>Rs. 5,115,000.00</td>
-                        <td>1</td> <!-- Changed to .0f for integer quantity -->
-                        <td>Rs. 5,115,000.00</td>
+                        <td>1</td>
+                        <td data-amount-raw="5115000.0">Rs. 5,115,000.00</td>
+                        <td>BTC-62815/25</td>
                         <td>BTC-62815/25</td>
                     </tr>
                 
-                    <tr>
+                    <tr data-date="2025-06-16"
+                        data-client="barkat trading corporation"
+                        data-category="general"
+                        data-ref-num="btc-62804/25">
                         <td>2025-06-16</td>
                         <td>Barkat Trading Corporation</td>
                         <td>General</td>
                         <td>Rs. 1,705,000.00</td>
-                        <td>1</td> <!-- Changed to .0f for integer quantity -->
-                        <td>Rs. 1,705,000.00</td>
+                        <td>1</td>
+                        <td data-amount-raw="1705000.0">Rs. 1,705,000.00</td>
+                        <td>BTC-62804/25</td>
                         <td>BTC-62804/25</td>
                     </tr>
                 
-                    <tr>
+                    <tr data-date="2025-06-13"
+                        data-client="barkat trading corporation"
+                        data-category="general"
+                        data-ref-num="btc-62791/25">
                         <td>2025-06-13</td>
                         <td>Barkat Trading Corporation</td>
                         <td>General</td>
                         <td>Rs. 6,820,000.00</td>
-                        <td>1</td> <!-- Changed to .0f for integer quantity -->
-                        <td>Rs. 6,820,000.00</td>
+                        <td>1</td>
+                        <td data-amount-raw="6820000.0">Rs. 6,820,000.00</td>
+                        <td>BTC-62791/25</td>
                         <td>BTC-62791/25</td>
                     </tr>
                 
-                    <tr>
+                    <tr data-date="2025-06-13"
+                        data-client="barkat trading corporation"
+                        data-category="general"
+                        data-ref-num="btc-62788/25">
                         <td>2025-06-13</td>
                         <td>Barkat Trading Corporation</td>
                         <td>General</td>
                         <td>Rs. 1,705,000.00</td>
-                        <td>1</td> <!-- Changed to .0f for integer quantity -->
-                        <td>Rs. 1,705,000.00</td>
+                        <td>1</td>
+                        <td data-amount-raw="1705000.0">Rs. 1,705,000.00</td>
+                        <td>BTC-62788/25</td>
                         <td>BTC-62788/25</td>
                     </tr>
                 
-                    <tr>
+                    <tr data-date="2025-06-12"
+                        data-client="barkat trading corporation"
+                        data-category="general"
+                        data-ref-num="386622/25">
                         <td>2025-06-12</td>
                         <td>Barkat Trading Corporation</td>
                         <td>General</td>
                         <td>Rs. 4,023,927.60</td>
-                        <td>1</td> <!-- Changed to .0f for integer quantity -->
-                        <td>Rs. 4,023,927.60</td>
+                        <td>1</td>
+                        <td data-amount-raw="4023927.6">Rs. 4,023,927.60</td>
+                        <td>386622/25</td>
                         <td>386622/25</td>
                     </tr>
                 
-                    <tr>
+                    <tr data-date="2025-05-17"
+                        data-client="barkat trading corporation"
+                        data-category="general"
+                        data-ref-num="386631/25">
                         <td>2025-05-17</td>
                         <td>Barkat Trading Corporation</td>
                         <td>General</td>
                         <td>Rs. 2,088,000.00</td>
-                        <td>1</td> <!-- Changed to .0f for integer quantity -->
-                        <td>Rs. 2,088,000.00</td>
+                        <td>1</td>
+                        <td data-amount-raw="2088000.0">Rs. 2,088,000.00</td>
+                        <td>386631/25</td>
                         <td>386631/25</td>
                     </tr>
                 
                 </tbody>
             </table>
+            <div class="no-results" id="no-client-expense-results" style="display:none;">
+                <i class="fas fa-search" style="font-size: 24px; margin-bottom: 10px;"></i>
+                <p>No client expenses match your filters</p>
+            </div>
             
                 </div>
             </div>

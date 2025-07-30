@@ -20,7 +20,11 @@ def init_state():
         'add_client_expense_quantity', # New: Quantity for client expenses
         'client_expense_ref_num_search', # New: Reference number search for client expenses
         'editing_client_expense_idx', # New: Index for editing client expenses
-        'temp_edit_client_expense_data' # New: Temp data for editing client expenses
+        'temp_edit_client_expense_data', # New: Temp data for editing client expenses
+        'client_expense_filter_start_date', # New: Filter for client expense start date
+        'client_expense_filter_end_date', # New: Filter for client expense end date
+        'client_expense_filter_person', # New: Filter for client expense person
+        'client_expense_filter_category' # New: Filter for client expense category
     ]
     defaults = {
         'selected_transaction_type': 'Paid to Me',
@@ -52,7 +56,11 @@ def init_state():
         'add_client_expense_quantity': 1.0, # Default quantity
         'client_expense_ref_num_search': '', # Default for client expense reference number search
         'editing_client_expense_idx': None, # Default for editing client expenses
-        'temp_edit_client_expense_data': {} # Default for temp data for editing client expenses
+        'temp_edit_client_expense_data': {}, # Default for temp data for editing client expenses
+        'client_expense_filter_start_date': datetime.now().date().replace(day=1), # Default start date for client expense filter
+        'client_expense_filter_end_date': datetime.now().date(), # Default end date for client expense filter
+        'client_expense_filter_person': "All", # Default person filter for client expense
+        'client_expense_filter_category': "All" # Default category filter for client expense
     }
     for k in keys:
         if k not in st.session_state:
@@ -70,7 +78,8 @@ INVOICE_DIR = os.path.join(REPO_PATH, "docs", "invoices")
 
 valid_cheque_statuses_lower = ["received/given", "processing", "bounced", "processing done"]
 valid_transaction_statuses_lower = ["completed", "pending"]
-valid_expense_categories = ["General", "Salaries", "Rent", "Utilities", "Supplies", "Travel", "Other"]
+valid_expense_categories = ["General", "Salaries", "Rent", "Utilities", "Supplies", "Travel", "Other"] # Used for adding new expense
+valid_expense_categories_with_all = ["All"] + valid_expense_categories # Used for filtering
 
 def clean_payments_data(df):
     if df.empty:
@@ -282,6 +291,9 @@ def generate_html_summary(df):
         person_options_html = ''.join(f'<option value="{name}">{name}</option>' for name in sorted(people_df['name'].unique()))
 
         client_expenses_df_all = pd.DataFrame()
+        client_people_html_options = '<option value="">All</option>'
+        expense_categories_html_options = '<option value="">All</option>' + ''.join(f'<option value="{cat}">{cat}</option>' for cat in valid_expense_categories)
+
         if os.path.exists(CLIENT_EXPENSES_FILE) and os.path.getsize(CLIENT_EXPENSES_FILE) > 0:
             client_expenses_df_all = pd.read_csv(CLIENT_EXPENSES_FILE, dtype={'original_transaction_ref_num': str, 'expense_person': str}, keep_default_na=False)
             client_expenses_df_all['expense_amount'] = pd.to_numeric(client_expenses_df_all['expense_amount'], errors='coerce').fillna(0.0)
@@ -298,6 +310,10 @@ def generate_html_summary(df):
             
             # Calculate Total Line Amount for client expenses
             client_expenses_df_all['total_line_amount'] = client_expenses_df_all['expense_amount'] * client_expenses_df_all['expense_quantity']
+
+            # Generate client options for HTML filter
+            unique_clients = sorted(client_expenses_df_all['expense_person'].unique())
+            client_people_html_options += ''.join(f'<option value="{name}">{name}</option>' for name in unique_clients)
         
         # Initialize with expected columns to prevent KeyError if empty
         total_paid_to_clients = pd.DataFrame(columns=['client_name', 'total_paid_to_client'])
@@ -307,7 +323,7 @@ def generate_html_summary(df):
 
         # Initialize with expected columns to prevent KeyError if empty
         total_spent_by_clients = pd.DataFrame(columns=['client_name', 'total_spent_by_client'])
-        if not client_expenses_df_all.empty:
+        if not client_expenses_df_all.empty: # Use client_expenses_df_all here for overall summary
             total_spent_by_clients = client_expenses_df_all.groupby('expense_person')['total_line_amount'].sum().reset_index() # Sum of total_line_amount
             total_spent_by_clients.rename(columns={'expense_person': 'client_name', 'total_line_amount': 'total_spent_by_client'}, inplace=True)
 
@@ -369,9 +385,9 @@ def generate_html_summary(df):
             detailed_expenses_html += f"""
             <h3 class="section-subtitle"><i class="fas fa-list-alt"></i> Detailed Client Expenses</h3>
             <div style="text-align: right; margin-bottom: 10px; font-weight: bold; font-size: 1.2em; color: #34495e;">
-                Total Client Expenses: Rs. {total_client_expenses_grand:,.2f}
+                Total Client Expenses: <span id="total-client-expenses-display">Rs. {total_client_expenses_grand:,.2f}</span>
             </div>
-            <table class="detailed-expenses-table">
+            <table class="detailed-expenses-table" id="detailed-expenses-table">
                 <thead>
                     <tr>
                         <th>Date</th>
@@ -381,25 +397,35 @@ def generate_html_summary(df):
                         <th>Quantity</th>
                         <th>Total Line Amount</th>
                         <th>Description</th>
+                        <th>Ref. Num.</th>
                     </tr>
                 </thead>
                 <tbody>
             """
             for idx, row in client_expenses_df_all.iterrows():
+                # Ensure data attributes are present for filtering
                 detailed_expenses_html += f"""
-                    <tr>
+                    <tr data-date="{row['expense_date_display']}"
+                        data-client="{row['expense_person'].lower()}"
+                        data-category="{row['expense_category'].lower()}"
+                        data-ref-num="{str(row['original_transaction_ref_num']).lower()}">
                         <td>{row['expense_date_display']}</td>
                         <td>{row['expense_person']}</td>
                         <td>{row['expense_category']}</td>
                         <td>Rs. {row['expense_amount']:,.2f}</td>
-                        <td>{row['expense_quantity']:,.0f}</td> <!-- Changed to .0f for integer quantity -->
-                        <td>Rs. {row['total_line_amount']:,.2f}</td>
+                        <td>{row['expense_quantity']:,.0f}</td>
+                        <td data-amount-raw="{row['total_line_amount']}">Rs. {row['total_line_amount']:,.2f}</td>
                         <td>{row['expense_description'] if row['expense_description'] else '-'}</td>
+                        <td>{row['original_transaction_ref_num'] if row['original_transaction_ref_num'] else '-'}</td>
                     </tr>
                 """
             detailed_expenses_html += """
                 </tbody>
             </table>
+            <div class="no-results" id="no-client-expense-results" style="display:none;">
+                <i class="fas fa-search" style="font-size: 24px; margin-bottom: 10px;"></i>
+                <p>No client expenses match your filters</p>
+            </div>
             """
         else:
             detailed_expenses_html = "<p class='no-results'>No detailed client expenses to display yet.</p>"
@@ -849,6 +875,7 @@ def generate_html_summary(df):
             td:nth-of-type(5):before {{ content: "Quantity"; }} /* New media query label */
             td:nth-of-type(6):before {{ content: "Total Line Amount"; }} /* New media query label */
             .detailed-expenses-table td:nth-of-type(7):before {{ content: "Description"; }}
+            .detailed-expenses-table td:nth-of-type(8):before {{ content: "Ref. Num."; }} /* New media query label */
         }}
 
         @media print {{
@@ -915,8 +942,12 @@ def generate_html_summary(df):
             oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
             $('#start-date').val(oneMonthAgo.toISOString().split('T')[0]);
             $('#end-date').val(today.toISOString().split('T')[0]);
+            $('#client-expense-start-date').val(oneMonthAgo.toISOString().split('T')[0]);
+            $('#client-expense-end-date').val(today.toISOString().split('T')[0]);
+
 
             applyFilters();
+            applyClientExpenseFilters(); // Apply filters for client expenses on load
 
             $('.tab-button').on('click', function() {{
                 const tabId = $(this).data('tab');
@@ -927,6 +958,25 @@ def generate_html_summary(df):
             }});
 
             $('.tab-button[data-tab="transactions-tab"]').click();
+
+            // Attach event listeners for client expense filters
+            $('#client-expense-start-date, #client-expense-end-date, #client-expense-person-filter, #client-expense-category-filter, #client-expense-ref-num-filter').on('change keyup', function() {{
+                applyClientExpenseFilters();
+            }});
+            $('#apply-client-expense-filters').on('click', function() {{
+                applyClientExpenseFilters();
+            }});
+            $('#reset-client-expense-filters').on('click', function() {{
+                const today = new Date();
+                const oneMonthAgo = new Date();
+                oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+                $('#client-expense-start-date').val(oneMonthAgo.toISOString().split('T')[0]);
+                $('#client-expense-end-date').val(today.toISOString().split('T')[0]);
+                $('#client-expense-person-filter').val('');
+                $('#client-expense-category-filter').val('');
+                $('#client-expense-ref-num-filter').val('');
+                applyClientExpenseFilters();
+            }});
         }});
 
         function applyFilters() {{
@@ -991,6 +1041,48 @@ def generate_html_summary(df):
             $('#status-filter').val('');
             $('#reference-number-filter').val('');
             applyFilters(); // Re-apply filters after resetting
+        }}
+
+        function applyClientExpenseFilters() {{
+            const startDate = $('#client-expense-start-date').val();
+            const endDate = $('#client-expense-end-date').val();
+            const client = $('#client-expense-person-filter').val().toLowerCase();
+            const category = $('#client-expense-category-filter').val().toLowerCase();
+            const refNum = $('#client-expense-ref-num-filter').val().toLowerCase();
+
+            let visibleRows = 0;
+            let totalAmount = 0;
+
+            $('#detailed-expenses-table tbody tr').each(function() {{
+                const rowDate = $(this).data('date');
+                const rowClient = $(this).data('client').toString().toLowerCase();
+                const rowCategory = $(this).data('category').toString().toLowerCase();
+                const rowRefNum = $(this).data('ref-num').toString().toLowerCase();
+                const rowAmount = parseFloat($(this).find('td[data-amount-raw]').data('amount-raw'));
+
+                const datePass = (!startDate || rowDate >= startDate) && (!endDate || rowDate <= endDate);
+                const clientPass = !client || rowClient.includes(client);
+                const categoryPass = !category || rowCategory.includes(category);
+                const refNumPass = !refNum || rowRefNum.includes(refNum);
+
+                if (datePass && clientPass && categoryPass && refNumPass) {{
+                    $(this).show();
+                    visibleRows++;
+                    totalAmount += rowAmount;
+                }} else {{
+                    $(this).hide();
+                }}
+            }});
+
+            $('#total-client-expenses-display').text('Rs. ' + totalAmount.toLocaleString('en-IN', {{ minimumFractionDigits: 2, maximumFractionDigits: 2 }}));
+
+            if (visibleRows === 0) {{
+                $('#no-client-expense-results').show();
+                $('#detailed-expenses-table').hide();
+            }} else {{
+                $('#no-client-expense-results').hide();
+                $('#detailed-expenses-table').show();
+            }}
         }}
 
         function downloadPdf() {{
@@ -1216,6 +1308,43 @@ def generate_html_summary(df):
                     <h2 class="section-title">
                         <i class="fas fa-money-check-alt"></i> Client Expenses Overview
                     </h2>
+
+                    <div class="filters">
+                        <h3 class="section-subtitle"><i class="fas fa-filter"></i> Client Expense Filters</h3>
+                        <div class="filter-grid">
+                            <div class="filter-group">
+                                <label for="client-expense-start-date">Expense Date Range</label>
+                                <input type="date" id="client-expense-start-date" class="date-filter">
+                                <span style="display: inline-block; margin: 0 5px; font-size: 12px;">to</span>
+                                <input type="date" id="client-expense-end-date" class="date-filter">
+                            </div>
+                            <div class="filter-group">
+                                <label for="client-expense-person-filter">Client Name</label>
+                                <select id="client-expense-person-filter">
+                                    {client_people_html_options}
+                                </select>
+                            </div>
+                            <div class="filter-group">
+                                <label for="client-expense-category-filter">Category</label>
+                                <select id="client-expense-category-filter">
+                                    {expense_categories_html_options}
+                                </select>
+                            </div>
+                            <div class="filter-group">
+                                <label for="client-expense-ref-num-filter">Reference Number</label>
+                                <input type="text" id="client-expense-ref-num-filter" placeholder="Search by reference number">
+                            </div>
+                        </div>
+                        <div class="filter-actions">
+                            <button class="filter-btn" id="apply-client-expense-filters">
+                                <i class="fas fa-filter"></i> Apply Filters
+                            </button>
+                            <button class="filter-btn reset-btn" id="reset-client-expense-filters">
+                                <i class="fas fa-redo"></i> Reset
+                            </button>
+                        </div>
+                    </div>
+
                     {client_overview_html}
                     {detailed_expenses_html}
                 </div>
@@ -2100,15 +2229,61 @@ with tab3:
             client_expenses_df_all['expense_quantity'] = pd.to_numeric(client_expenses_df_all['expense_quantity'], errors='coerce').fillna(1.0)
             client_expenses_df_all['total_line_amount'] = client_expenses_df_all['expense_amount'] * client_expenses_df_all['expense_quantity'] # Calculate total line amount
         
-        # Add reference number search to client expenses
+        # Streamlit filters for the display of client expenses
+        col_exp_filter1, col_exp_filter2 = st.columns(2)
+        with col_exp_filter1:
+            st.session_state['client_expense_filter_start_date'] = st.date_input(
+                "Expense Start Date",
+                value=st.session_state['client_expense_filter_start_date'] if st.session_state['client_expense_filter_start_date'] else datetime.now().date().replace(day=1),
+                key='client_expense_filter_start_date_input'
+            )
+            
+            client_people_for_filter = ["All"] + sorted(people_df_for_expenses[people_df_for_expenses['category'] == 'client']['name'].astype(str).tolist())
+            st.session_state['client_expense_filter_person'] = st.selectbox(
+                "Filter by Client",
+                client_people_for_filter,
+                index=client_people_for_filter.index(st.session_state['client_expense_filter_person']) if st.session_state['client_expense_filter_person'] in client_people_for_filter else 0,
+                key='client_expense_filter_person_select'
+            )
+        with col_exp_filter2:
+            st.session_state['client_expense_filter_end_date'] = st.date_input(
+                "Expense End Date",
+                value=st.session_state['client_expense_filter_end_date'] if st.session_state['client_expense_filter_end_date'] else datetime.now().date(),
+                key='client_expense_filter_end_date_input'
+            )
+            st.session_state['client_expense_filter_category'] = st.selectbox(
+                "Filter by Category",
+                valid_expense_categories_with_all,
+                index=valid_expense_categories_with_all.index(st.session_state['client_expense_filter_category']) if st.session_state['client_expense_filter_category'] in valid_expense_categories_with_all else 0,
+                key='client_expense_filter_category_select'
+            )
+        
         st.session_state['client_expense_ref_num_search'] = st.text_input(
             "Search Client Expenses by Reference Number",
             value=st.session_state['client_expense_ref_num_search'],
             key='client_expense_ref_num_search_input',
             placeholder="Enter reference number..."
         )
-        
+
         filtered_client_expenses_for_display = client_expenses_df_all.copy()
+
+        # Apply Streamlit filters
+        if st.session_state['client_expense_filter_start_date']:
+            filtered_client_expenses_for_display = filtered_client_expenses_for_display[
+                filtered_client_expenses_for_display['expense_date_parsed'] >= pd.to_datetime(st.session_state['client_expense_filter_start_date'])
+            ]
+        if st.session_state['client_expense_filter_end_date']:
+            filtered_client_expenses_for_display = filtered_client_expenses_for_display[
+                filtered_client_expenses_for_display['expense_date_parsed'] <= pd.to_datetime(st.session_state['client_expense_filter_end_date'])
+            ]
+        if st.session_state['client_expense_filter_person'] != "All":
+            filtered_client_expenses_for_display = filtered_client_expenses_for_display[
+                filtered_client_expenses_for_display['expense_person'] == st.session_state['client_expense_filter_person']
+            ]
+        if st.session_state['client_expense_filter_category'] != "All":
+            filtered_client_expenses_for_display = filtered_client_expenses_for_display[
+                filtered_client_expenses_for_display['expense_category'] == st.session_state['client_expense_filter_category']
+            ]
         if st.session_state['client_expense_ref_num_search']:
             search_term = st.session_state['client_expense_ref_num_search'].lower()
             filtered_client_expenses_for_display = filtered_client_expenses_for_display[
