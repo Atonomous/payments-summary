@@ -47,3 +47,4 @@ date,person,amount,type,status,description,payment_method,reference_number,chequ
 2025-06-26,Rehmat Lawn Mover,6000000.0,i_paid,completed,Faysal Bank,cash,CA0000000019,,completed
 2025-06-27,Rehmat Lawn Mover,4000000.0,i_paid,completed,Faysal Bank,cash,CA00000000021,,completed
 2025-07-01,Rehmat Lawn Mover,4950000.0,i_paid,completed,Faysal Bank,cash,CA0000000020,,completed
+2025-07-18,Rehmat Lawn Mover,2500000.0,i_paid,completed,Faysal Bank,cash,0000000,,completed
