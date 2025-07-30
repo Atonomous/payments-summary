@@ -37,5 +37,5 @@ date,person,amount,type,status,description,payment_method,reference_number,chequ
 2025-05-09,Rehmat Lawn Mover,5000000.0,i_paid,completed,Faysal Bank,cheque,3090301000001477,received/given,completed
 2025-07-11,Rehmat Lawn Mover,2000000.0,i_paid,completed,Cash Paid to Husnain,cash,1200000,,completed
 2025-05-12,Barkat Trading Corporation,2900000.0,i_paid,completed,online,cash,Invoice -386511,,completed
-2025-05-17,Barkat Trading Corporation,2088000.0,i_paid,completed,online,cash,Invoice -386631,,completed
+2025-05-17,Barkat Trading Corporation,500000.0,i_paid,completed,online,cash,Invoice -386631,,completed
 2025-05-30,Barkat Trading Corporation,3000000.0,i_paid,completed,online,cash,invoice -62548,,completed
