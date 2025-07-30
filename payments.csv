@@ -40,11 +40,11 @@ date,person,amount,type,status,description,payment_method,reference_number,chequ
 2025-05-17,Barkat Trading Corporation,500000.0,i_paid,completed,online,cash,Invoice -386631,,completed
 2025-05-30,Barkat Trading Corporation,3000000.0,i_paid,completed,online,cash,invoice -62548,,completed
 2025-06-02,Barkat Trading Corporation,5000000.0,i_paid,completed,52372188,cash,invoice - 386621,,completed
-2025-06-12,Rehmat Lawn Mover,5000000.0,i_paid,completed,Faysal Bank,cash,CA0000000012,,completed
-2025-06-14,Rehmat Lawn Mover,8000000.0,i_paid,completed,Faysal Bank,cash,CA0000000015,,completed
-2025-06-16,Rehmat Lawn Mover,8000000.0,i_paid,completed,Faysal Bank,cash,CA0000000016,,completed
-2025-06-21,Rehmat Lawn Mover,34000.0,i_paid,completed,on data,cash,invoice #BTC-386718,,completed
-2025-06-26,Rehmat Lawn Mover,6000000.0,i_paid,completed,Faysal Bank,cash,CA0000000019,,completed
-2025-06-27,Rehmat Lawn Mover,4000000.0,i_paid,completed,Faysal Bank,cash,CA00000000021,,completed
-2025-07-01,Rehmat Lawn Mover,4950000.0,i_paid,completed,Faysal Bank,cash,CA0000000020,,completed
-2025-07-18,Rehmat Lawn Mover,2500000.0,i_paid,completed,Faysal Bank,cash,0000000,,completed
+2025-06-12,Barkat Trading Corporation,5000000.0,i_paid,completed,Faysal Bank,cheque,CA0000000012,processing done,completed
+2025-06-14,Barkat Trading Corporation,8000000.0,i_paid,completed,Faysal Bank,cheque,CA0000000015,processing done,completed
+2025-06-16,Barkat Trading Corporation,8000000.0,i_paid,completed,Faysal Bank,cheque,CA0000000016,processing done,completed
+2025-06-21,Barkat Trading Corporation,34000.0,i_paid,completed,on data,cash,invoice #BTC-386718,,completed
+2025-06-26,Barkat Trading Corporation,6000000.0,i_paid,completed,Faysal Bank,cheque,CA0000000019,processing done,completed
+2025-06-27,Barkat Trading Corporation,4000000.0,i_paid,completed,Faysal Bank,cash,CA00000000021,,completed
+2025-07-01,Barkat Trading Corporation,4950000.0,i_paid,completed,Faysal Bank,cheque,CA0000000020,processing done,completed
+2025-07-18,Barkat Trading Corporation,2500000.0,i_paid,completed,Faysal Bank,cheque,0000000,processing done,completed
