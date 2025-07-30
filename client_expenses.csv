@@ -1,7 +1,7 @@
 original_transaction_ref_num,expense_date,expense_person,expense_category,expense_amount,expense_quantity,expense_description,expense_date_parsed,expense_date_display,total_line_amount
 ,2025-07-01,Butt Fitness,General,1600000.0,13.0,Gym Strength,2025-07-01,2025-07-01,20800000.0
-,2025-07-08,Barkat Trading Corporation,General,195000.0,1.0,BTC-386836/25,2025-07-08,2025-07-08,195000.0
-BTC-38742/25,2025-06-27,Barkat Trading Corporation,General,5625000.0,1.0,BTC-38742/25,,,
+BTC-386836/25,2025-07-08,Barkat Trading Corporation,General,195000.0,1.0,Online,,,
+BTC-38742/25,2025-06-27,Barkat Trading Corporation,General,5625000.0,1.0,BTC-38742/25,2025-06-27,2025-06-27,5625000.0
 ,,Barkat Trading Corporation,General,487500.0,1.0,BTC-386741/25,,-,487500.0
 ,,Barkat Trading Corporation,General,2933000.0,1.0,BTC-62548/25,,-,2933000.0
 ,2025-06-11,Barkat Trading Corporation,General,3300000.0,1.0,BTC-62765/25,2025-06-11,2025-06-11,3300000.0
