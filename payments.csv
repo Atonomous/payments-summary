@@ -39,3 +39,4 @@ date,person,amount,type,status,description,payment_method,reference_number,chequ
 2025-05-12,Barkat Trading Corporation,2900000.0,i_paid,completed,online,cash,Invoice -386511,,completed
 2025-05-17,Barkat Trading Corporation,500000.0,i_paid,completed,online,cash,Invoice -386631,,completed
 2025-05-30,Barkat Trading Corporation,3000000.0,i_paid,completed,online,cash,invoice -62548,,completed
+2025-06-02,Barkat Trading Corporation,5000000.0,i_paid,completed,52372188,cash,invoice - 386621,,completed
