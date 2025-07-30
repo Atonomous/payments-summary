@@ -17,7 +17,10 @@ def init_state():
         'view_reference_number_search',
         'selected_client_for_expense', 'add_client_expense_amount', 'add_client_expense_date',
         'add_client_expense_category', 'add_client_expense_description', 'reset_client_expense_form',
-        'add_client_expense_quantity' # New: Quantity for client expenses
+        'add_client_expense_quantity', # New: Quantity for client expenses
+        'client_expense_ref_num_search', # New: Reference number search for client expenses
+        'editing_client_expense_idx', # New: Index for editing client expenses
+        'temp_edit_client_expense_data' # New: Temp data for editing client expenses
     ]
     defaults = {
         'selected_transaction_type': 'Paid to Me',
@@ -46,7 +49,10 @@ def init_state():
         'add_client_expense_category': 'General',
         'add_client_expense_description': '',
         'reset_client_expense_form': False,
-        'add_client_expense_quantity': 1.0 # Default quantity
+        'add_client_expense_quantity': 1.0, # Default quantity
+        'client_expense_ref_num_search': '', # Default for client expense reference number search
+        'editing_client_expense_idx': None, # Default for editing client expenses
+        'temp_edit_client_expense_data': {} # Default for temp data for editing client expenses
     }
     for k in keys:
         if k not in st.session_state:
@@ -1485,6 +1491,8 @@ def reset_form_session_state_for_add_client_expense():
     st.session_state['add_client_expense_category'] = 'General'
     st.session_state['add_client_expense_description'] = ''
     st.session_state['add_client_expense_quantity'] = 1.0 # Reset quantity
+    st.session_state['editing_client_expense_idx'] = None
+    st.session_state['temp_edit_client_expense_data'] = {}
 
 if st.session_state.get('reset_add_form', False):
     reset_form_session_state_for_add_transaction()
@@ -2092,6 +2100,28 @@ with tab3:
             client_expenses_df_all['expense_quantity'] = pd.to_numeric(client_expenses_df_all['expense_quantity'], errors='coerce').fillna(1.0)
             client_expenses_df_all['total_line_amount'] = client_expenses_df_all['expense_amount'] * client_expenses_df_all['expense_quantity'] # Calculate total line amount
         
+        # Add reference number search to client expenses
+        st.session_state['client_expense_ref_num_search'] = st.text_input(
+            "Search Client Expenses by Reference Number",
+            value=st.session_state['client_expense_ref_num_search'],
+            key='client_expense_ref_num_search_input',
+            placeholder="Enter reference number..."
+        )
+        
+        filtered_client_expenses_for_display = client_expenses_df_all.copy()
+        if st.session_state['client_expense_ref_num_search']:
+            search_term = st.session_state['client_expense_ref_num_search'].lower()
+            filtered_client_expenses_for_display = filtered_client_expenses_for_display[
+                filtered_client_expenses_for_display['original_transaction_ref_num'].astype(str).str.lower().str.contains(search_term)
+            ]
+        
+        # Add original_index for editing selection
+        if not filtered_client_expenses_for_display.empty:
+            filtered_client_expenses_for_display['original_index'] = filtered_client_expenses_for_display.index
+        else:
+            st.info("No client expenses match the current filters.")
+
+
         # Initialize with expected columns to prevent KeyError if empty
         total_paid_to_clients = pd.DataFrame(columns=['client_name', 'total_paid_to_client'])
         if not payments_df_all[payments_df_all['type'] == 'i_paid'].empty:
@@ -2100,7 +2130,7 @@ with tab3:
 
         # Initialize with expected columns to prevent KeyError if empty
         total_spent_by_clients = pd.DataFrame(columns=['client_name', 'total_spent_by_client'])
-        if not client_expenses_df_all.empty:
+        if not client_expenses_df_all.empty: # Use client_expenses_df_all here for overall summary
             total_spent_by_clients = client_expenses_df_all.groupby('expense_person')['total_line_amount'].sum().reset_index() # Sum of total_line_amount
             total_spent_by_clients.rename(columns={'expense_person': 'client_name', 'total_line_amount': 'total_spent_by_client'}, inplace=True)
 
@@ -2137,14 +2167,20 @@ with tab3:
             )
 
             st.write("#### Detailed Client Expenses")
-            if not client_expenses_df_all.empty:
+            if not filtered_client_expenses_for_display.empty: # Use filtered_client_expenses_for_display here
                 st.dataframe(
-                    client_expenses_df_all[[
-                        'expense_date_display', 'expense_person', 'expense_category', 'expense_amount', 'expense_quantity', 'total_line_amount', 'expense_description'
-                    ]].rename(columns={'expense_date_display': 'Expense Date'}).style.format({
-                        'expense_amount': "Rs. {:,.2f}",
-                        'expense_quantity': "{:,.0f}", # Format quantity
-                        'total_line_amount': "Rs. {:,.2f}" # Format total line amount
+                    filtered_client_expenses_for_display[[
+                        'original_transaction_ref_num', 'expense_date_display', 'expense_person', 'expense_category', 'expense_amount', 'expense_quantity', 'total_line_amount', 'expense_description'
+                    ]].rename(columns={
+                        'original_transaction_ref_num': 'Ref. Num.',
+                        'expense_date_display': 'Expense Date',
+                        'expense_amount': 'Unit Price',
+                        'expense_quantity': 'Quantity',
+                        'total_line_amount': 'Total Line Amount'
+                    }).style.format({
+                        'Unit Price': "Rs. {:,.2f}",
+                        'Quantity': "{:,.0f}", # Format quantity
+                        'Total Line Amount': "Rs. {:,.2f}" # Format total line amount
                     }),
                     use_container_width=True,
                     hide_index=True
@@ -2155,6 +2191,167 @@ with tab3:
             st.info("No client expenses or 'I Paid' transactions recorded yet.")
     except Exception as e:
         st.error(f"Error loading client expenses summary: {e}")
+
+    st.markdown("---")
+    st.subheader("Edit Client Expense")
+
+    edit_client_expense_options = []
+    if not filtered_client_expenses_for_display.empty:
+        edit_client_expense_options = [
+            f"ID: {row['original_index']} - {row['expense_date_display']} - {row['expense_person']} - Rs. {row['total_line_amount']:,.2f}"
+            for idx, row in filtered_client_expenses_for_display.iterrows()
+        ]
+
+    selected_edit_client_expense_option = st.selectbox(
+        "Select client expense to edit:",
+        ["Select a client expense"] + edit_client_expense_options,
+        key='select_edit_client_expense'
+    )
+
+    if selected_edit_client_expense_option != "Select a client expense":
+        selected_original_client_expense_index = int(selected_edit_client_expense_option.split(' - ')[0].replace('ID: ', ''))
+
+        if st.session_state['editing_client_expense_idx'] != selected_original_client_expense_index:
+            st.session_state['editing_client_expense_idx'] = selected_original_client_expense_index
+            loaded_edit_client_expense_data = client_expenses_df_all.loc[st.session_state['editing_client_expense_idx']].to_dict()
+            
+            # Ensure date is a date object for st.date_input
+            if isinstance(loaded_edit_client_expense_data.get('expense_date'), pd.Timestamp):
+                loaded_edit_client_expense_data['expense_date'] = loaded_edit_client_expense_data['expense_date'].date()
+            elif isinstance(loaded_edit_client_expense_data.get('expense_date'), str):
+                try:
+                    loaded_edit_client_expense_data['expense_date'] = datetime.strptime(loaded_edit_client_expense_data['expense_date'], "%Y-%m-%d").date()
+                except ValueError:
+                    loaded_edit_client_expense_data['expense_date'] = None
+
+            st.session_state['temp_edit_client_expense_data'] = loaded_edit_client_expense_data
+            st.rerun()
+
+    if st.session_state['editing_client_expense_idx'] is not None and st.session_state.get('temp_edit_client_expense_data'):
+        st.markdown("---")
+        st.subheader(f"Editing Client Expense ID: {st.session_state['editing_client_expense_idx']}")
+        edit_client_expense_data = st.session_state['temp_edit_client_expense_data']
+
+        with st.form("edit_client_expense_form"):
+            col1_exp_edit, col2_exp_edit = st.columns(2)
+            with col1_exp_edit:
+                edited_original_transaction_ref_num = st.text_input(
+                    "Original Transaction Ref. Num.",
+                    value=str(edit_client_expense_data.get('original_transaction_ref_num', '')),
+                    key='edit_client_expense_ref_num'
+                )
+                edited_expense_amount = st.number_input(
+                    "Expense Amount (Unit Price Rs.)",
+                    min_value=0.0,
+                    format="%.2f",
+                    value=float(edit_client_expense_data.get('expense_amount', 0.0)),
+                    key='edit_client_expense_amount'
+                )
+                edited_expense_date = st.date_input(
+                    "Expense Date",
+                    value=edit_client_expense_data.get('expense_date'),
+                    key='edit_client_expense_date'
+                )
+                edited_expense_quantity = st.number_input(
+                    "Quantity",
+                    min_value=0.0,
+                    format="%.2f",
+                    value=float(edit_client_expense_data.get('expense_quantity', 1.0)),
+                    key='edit_client_expense_quantity'
+                )
+
+            with col2_exp_edit:
+                try:
+                    people_df_edit_exp = pd.read_csv(PEOPLE_FILE)
+                    client_people_edit_exp = people_df_edit_exp[people_df_edit_exp['category'] == 'client']['name'].astype(str).tolist()
+                    current_expense_person = str(edit_client_expense_data.get('expense_person', ''))
+
+                    if current_expense_person not in client_people_edit_exp and current_expense_person != '':
+                        client_people_edit_exp = [current_expense_person] + client_people_edit_exp
+                        default_expense_person_index = 0
+                    elif current_expense_person == '':
+                        default_expense_person_index = 0 if len(client_people_edit_exp) > 0 else 0
+                    else:
+                        default_expense_person_index = client_people_edit_exp.index(current_expense_person)
+
+                    edited_expense_person = st.selectbox(
+                        "Select Client",
+                        client_people_edit_exp,
+                        index=default_expense_person_index,
+                        key='edit_client_expense_person'
+                    )
+                except Exception as e:
+                    st.error(f"Error loading client data for expense edit: {e}")
+                    edited_expense_person = str(edit_client_expense_data.get('expense_person', ''))
+
+                edited_expense_category = st.selectbox(
+                    "Expense Category",
+                    valid_expense_categories,
+                    index=valid_expense_categories.index(str(edit_client_expense_data.get('expense_category', 'General'))),
+                    key='edit_client_expense_category'
+                )
+                edited_expense_description = st.text_input(
+                    "Expense Description",
+                    value=str(edit_client_expense_data.get('expense_description', '')),
+                    key='edit_client_expense_description'
+                )
+
+            col1_exp_btns, col2_exp_btns = st.columns(2)
+            with col1_exp_btns:
+                submit_client_expense_button = st.form_submit_button("💾 Save Client Expense Changes")
+            with col2_exp_btns:
+                cancel_client_expense_button = st.form_submit_button("❌ Cancel Client Expense Edit")
+
+            if submit_client_expense_button:
+                expense_edit_validation_passed = True
+                if edited_expense_amount <= 0:
+                    st.warning("Expense amount (unit price) must be greater than 0.")
+                    expense_edit_validation_passed = False
+                if edited_expense_quantity <= 0:
+                    st.warning("Quantity must be greater than 0.")
+                    expense_edit_validation_passed = False
+                if not edited_expense_person:
+                    st.warning("Please select a client for the expense.")
+                    expense_edit_validation_passed = False
+
+                if expense_edit_validation_passed:
+                    try:
+                        client_expenses_df_all.loc[st.session_state['editing_client_expense_idx']] = {
+                            "original_transaction_ref_num": edited_original_transaction_ref_num,
+                            "expense_date": edited_expense_date.strftime("%Y-%m-%d"),
+                            "expense_person": edited_expense_person,
+                            "expense_category": edited_expense_category,
+                            "expense_amount": edited_expense_amount,
+                            "expense_quantity": edited_expense_quantity,
+                            "expense_description": edited_expense_description
+                        }
+                        client_expenses_df_all.to_csv(CLIENT_EXPENSES_FILE, index=False)
+                        
+                        # Re-clean and save to ensure consistency after manual edit
+                        updated_client_expenses_df = pd.read_csv(CLIENT_EXPENSES_FILE, dtype={'original_transaction_ref_num': str, 'expense_person': str}, keep_default_na=False)
+                        updated_client_expenses_df['expense_amount'] = pd.to_numeric(updated_client_expenses_df['expense_amount'], errors='coerce').fillna(0.0)
+                        updated_client_expenses_df['expense_quantity'] = pd.to_numeric(updated_client_expenses_df['expense_quantity'], errors='coerce').fillna(1.0)
+                        updated_client_expenses_df['expense_date'] = pd.to_datetime(updated_client_expenses_df['expense_date'], errors='coerce')
+                        updated_client_expenses_df.to_csv(CLIENT_EXPENSES_FILE, index=False)
+
+                        # Also regenerate main payments HTML summary as client expenses impact overall view
+                        current_payments_df = pd.read_csv(CSV_FILE, dtype={'reference_number': str}, keep_default_na=False)
+                        current_payments_df = clean_payments_data(current_payments_df)
+                        generate_html_summary(current_payments_df)
+                        git_push()
+
+                        st.success("✅ Client expense updated successfully!")
+                        st.session_state['editing_client_expense_idx'] = None
+                        st.session_state['temp_edit_client_expense_data'] = {}
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error saving client expense changes: {e}")
+
+            if cancel_client_expense_button:
+                st.session_state['editing_client_expense_idx'] = None
+                st.session_state['temp_edit_client_expense_data'] = {}
+                st.rerun()
+
 
 with tab4:
     st.subheader("Manage People")
