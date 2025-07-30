@@ -81,6 +81,12 @@ valid_transaction_statuses_lower = ["completed", "pending"]
 valid_expense_categories = ["General", "Salaries", "Rent", "Utilities", "Supplies", "Travel", "Other"] # Used for adding new expense
 valid_expense_categories_with_all = ["All"] + valid_expense_categories # Used for filtering
 
+# Define client expense columns globally for consistency
+CLIENT_EXPENSE_COLUMNS = [
+    "original_transaction_ref_num", "expense_date", "expense_person",
+    "expense_category", "expense_amount", "expense_quantity", "expense_description"
+]
+
 def clean_payments_data(df):
     if df.empty:
         return df
@@ -162,30 +168,39 @@ def init_files():
             df.to_csv(PEOPLE_FILE, index=False)
 
         if not os.path.exists(CLIENT_EXPENSES_FILE):
-            pd.DataFrame(columns=[
-                "original_transaction_ref_num", "expense_date", "expense_person",
-                "expense_category", "expense_amount", "expense_quantity", "expense_description" # Added expense_quantity
-            ]).to_csv(CLIENT_EXPENSES_FILE, index=False)
+            pd.DataFrame(columns=CLIENT_EXPENSE_COLUMNS).to_csv(CLIENT_EXPENSES_FILE, index=False)
             st.toast(f"Created new {CLIENT_EXPENSES_FILE}")
         else:
-            df_exp = pd.read_csv(CLIENT_EXPENSES_FILE, dtype={'original_transaction_ref_num': str, 'expense_person': str}, keep_default_na=False)
+            # Read with specific columns and dtypes to avoid issues
+            df_exp = pd.read_csv(CLIENT_EXPENSES_FILE,
+                                 dtype={
+                                     'original_transaction_ref_num': str,
+                                     'expense_person': str,
+                                     'expense_amount': float, # Ensure amount is read as float
+                                     'expense_quantity': float # Ensure quantity is read as float
+                                 },
+                                 keep_default_na=False)
             
-            # Add 'expense_quantity' column if it doesn't exist
+            # Ensure 'expense_quantity' column is present and numeric
             if 'expense_quantity' not in df_exp.columns:
-                df_exp['expense_quantity'] = 1.0 # Default to 1.0 for existing entries
-                st.toast("Added 'expense_quantity' column to client_expenses.csv")
+                df_exp['expense_quantity'] = 1.0
+            df_exp['expense_quantity'] = pd.to_numeric(df_exp['expense_quantity'], errors='coerce').fillna(1.0)
 
+            # Clean and ensure correct string types for other columns
             for col in ["original_transaction_ref_num", "expense_person", "expense_category", "expense_description"]:
                 if col in df_exp.columns:
                     df_exp[col] = df_exp[col].astype(str).replace('nan', '').replace('None', '').str.strip()
+            
+            # Ensure expense_amount is numeric and fillna
             if 'expense_amount' in df_exp.columns:
                 df_exp['expense_amount'] = pd.to_numeric(df_exp['expense_amount'], errors='coerce').fillna(0.0)
-            if 'expense_quantity' in df_exp.columns: # Ensure quantity is numeric
-                df_exp['expense_quantity'] = pd.to_numeric(df_exp['expense_quantity'], errors='coerce').fillna(1.0)
+
+            # Ensure expense_date is datetime
             if 'expense_date' in df_exp.columns:
-                # Parse to datetime, but don't format here. Formatting will happen at display time.
                 df_exp['expense_date'] = pd.to_datetime(df_exp['expense_date'], errors='coerce')
-            df_exp.to_csv(CLIENT_EXPENSES_FILE, index=False)
+            
+            # Save back with explicit columns to ensure order and prevent extra columns
+            df_exp.to_csv(CLIENT_EXPENSES_FILE, index=False, columns=CLIENT_EXPENSE_COLUMNS)
             st.toast("Client expenses data cleaned and saved.")
 
     except Exception as e:
@@ -295,7 +310,14 @@ def generate_html_summary(df):
         expense_categories_html_options = '<option value="">All</option>' + ''.join(f'<option value="{cat}">{cat}</option>' for cat in valid_expense_categories)
 
         if os.path.exists(CLIENT_EXPENSES_FILE) and os.path.getsize(CLIENT_EXPENSES_FILE) > 0:
-            client_expenses_df_all = pd.read_csv(CLIENT_EXPENSES_FILE, dtype={'original_transaction_ref_num': str, 'expense_person': str}, keep_default_na=False)
+            client_expenses_df_all = pd.read_csv(CLIENT_EXPENSES_FILE,
+                                                 dtype={
+                                                     'original_transaction_ref_num': str,
+                                                     'expense_person': str,
+                                                     'expense_amount': float,
+                                                     'expense_quantity': float
+                                                 },
+                                                 keep_default_na=False)
             client_expenses_df_all['expense_amount'] = pd.to_numeric(client_expenses_df_all['expense_amount'], errors='coerce').fillna(0.0)
             client_expenses_df_all['expense_person'] = client_expenses_df_all['expense_person'].astype(str)
             
@@ -2185,7 +2207,7 @@ with tab3:
                         "expense_quantity": expense_quantity, # Added quantity here
                         "expense_description": expense_description
                     }
-                    pd.DataFrame([new_expense_row]).to_csv(CLIENT_EXPENSES_FILE, mode='a', header=False, index=False)
+                    pd.DataFrame([new_expense_row], columns=CLIENT_EXPENSE_COLUMNS).to_csv(CLIENT_EXPENSES_FILE, mode='a', header=False, index=False)
                     st.success("Client expense added successfully!")
                     
                     updated_payments_df = pd.read_csv(CSV_FILE, dtype={'reference_number': str}, keep_default_na=False)
@@ -2214,7 +2236,14 @@ with tab3:
 
         client_expenses_df_all = pd.DataFrame()
         if os.path.exists(CLIENT_EXPENSES_FILE) and os.path.getsize(CLIENT_EXPENSES_FILE) > 0:
-            client_expenses_df_all = pd.read_csv(CLIENT_EXPENSES_FILE, dtype={'original_transaction_ref_num': str, 'expense_person': str}, keep_default_na=False)
+            client_expenses_df_all = pd.read_csv(CLIENT_EXPENSES_FILE,
+                                                 dtype={
+                                                     'original_transaction_ref_num': str,
+                                                     'expense_person': str,
+                                                     'expense_amount': float,
+                                                     'expense_quantity': float
+                                                 },
+                                                 keep_default_na=False)
             client_expenses_df_all['expense_amount'] = pd.to_numeric(client_expenses_df_all['expense_amount'], errors='coerce').fillna(0.0)
             client_expenses_df_all['expense_person'] = client_expenses_df_all['expense_person'].astype(str)
             
@@ -2500,14 +2529,21 @@ with tab3:
                             "expense_quantity": edited_expense_quantity,
                             "expense_description": edited_expense_description
                         }
-                        client_expenses_df_all.to_csv(CLIENT_EXPENSES_FILE, index=False)
+                        client_expenses_df_all.to_csv(CLIENT_EXPENSES_FILE, index=False, columns=CLIENT_EXPENSE_COLUMNS)
                         
                         # Re-clean and save to ensure consistency after manual edit
-                        updated_client_expenses_df = pd.read_csv(CLIENT_EXPENSES_FILE, dtype={'original_transaction_ref_num': str, 'expense_person': str}, keep_default_na=False)
+                        updated_client_expenses_df = pd.read_csv(CLIENT_EXPENSES_FILE,
+                                                                 dtype={
+                                                                     'original_transaction_ref_num': str,
+                                                                     'expense_person': str,
+                                                                     'expense_amount': float,
+                                                                     'expense_quantity': float
+                                                                 },
+                                                                 keep_default_na=False)
                         updated_client_expenses_df['expense_amount'] = pd.to_numeric(updated_client_expenses_df['expense_amount'], errors='coerce').fillna(0.0)
                         updated_client_expenses_df['expense_quantity'] = pd.to_numeric(updated_client_expenses_df['expense_quantity'], errors='coerce').fillna(1.0)
                         updated_client_expenses_df['expense_date'] = pd.to_datetime(updated_client_expenses_df['expense_date'], errors='coerce')
-                        updated_client_expenses_df.to_csv(CLIENT_EXPENSES_FILE, index=False)
+                        updated_client_expenses_df.to_csv(CLIENT_EXPENSES_FILE, index=False, columns=CLIENT_EXPENSE_COLUMNS)
 
                         # Also regenerate main payments HTML summary as client expenses impact overall view
                         current_payments_df = pd.read_csv(CSV_FILE, dtype={'reference_number': str}, keep_default_na=False)

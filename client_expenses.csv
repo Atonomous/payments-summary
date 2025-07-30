@@ -1,21 +1,21 @@
-original_transaction_ref_num,expense_date,expense_person,expense_category,expense_amount,expense_quantity,expense_description,expense_date_parsed,expense_date_display,total_line_amount
-,2025-07-01,Butt Fitness,General,1600000.0,13.0,Gym Strength,2025-07-01,2025-07-01,20800000.0
-BTC-386836/25,2025-07-08,Barkat Trading Corporation,General,195000.0,1.0,BTC-386836/25,2025-07-08,2025-07-08,195000.0
-BTC-38742/25,2025-06-27,Barkat Trading Corporation,General,5625000.0,1.0,BTC-38742/25,2025-06-27,2025-06-27,5625000.0
-BTC-386741/25,2025-06-27,Barkat Trading Corporation,General,487500.0,1.0,BTC-386741/25,2025-06-27,2025-06-27,487500.0
-BTC-62548/25,2025-05-30,Barkat Trading Corporation,General,2933000.0,1.0,BTC-62548/25,2025-05-30,2025-05-30,2933000.0
-BTC-62765/25,2025-06-11,Barkat Trading Corporation,General,3300000.0,1.0,BTC-62765/25,2025-06-11,2025-06-11,3300000.0
-386645/25,2025-06-10,Barkat Trading Corporation,General,421500.0,1.0,386645/25,2025-06-10,2025-06-10,421500.0
-BTC-62549/25,2025-05-30,Barkat Trading Corporation,General,19400.0,1.0,BTC-62549/25,2025-05-30,2025-05-30,19400.0
-BTC-386740/25,2025-06-21,Barkat Trading Corporation,General,105100.0,1.0,BTC-386740/25,2025-06-21,2025-06-21,105100.0
-BTC-386718/25,2025-06-21,Barkat Trading Corporation,General,368000.0,1.0,BTC-386718/25,2025-06-21,2025-06-21,368000.0
-BTC-62905/25,2025-06-20,Barkat Trading Corporation,General,1705000.0,1.0,BTC-62905/25,2025-06-20,2025-06-20,1705000.0
-# 386735/25,2025-06-19,Barkat Trading Corporation,General,1051000.0,1.0,# 386735/25,2025-06-19,2025-06-19,1051000.0
-#386715/25,2025-06-19,Barkat Trading Corporation,General,325000.0,1.0,#386715/25,2025-06-19,2025-06-19,325000.0
-BTC-62819/25,2025-06-16,Barkat Trading Corporation,General,134000.0,1.0,BTC-62819/25,2025-06-16,2025-06-16,134000.0
-BTC-62815/25,2025-06-16,Barkat Trading Corporation,General,5115000.0,1.0,BTC-62815/25,2025-06-16,2025-06-16,5115000.0
-BTC-62804/25,2025-06-16,Barkat Trading Corporation,General,1705000.0,1.0,BTC-62804/25,2025-06-16,2025-06-16,1705000.0
-BTC-62791/25,2025-06-13,Barkat Trading Corporation,General,6820000.0,1.0,BTC-62791/25,2025-06-13,2025-06-13,6820000.0
-BTC-62788/25,2025-06-13,Barkat Trading Corporation,General,1705000.0,1.0,BTC-62788/25,2025-06-13,2025-06-13,1705000.0
-386622/25,2025-06-12,Barkat Trading Corporation,General,4023927.6,1.0,386622/25,2025-06-12,2025-06-12,4023927.6
-386631/25,2025-05-17,Barkat Trading Corporation,General,2088000.0,1.0,386631/25,,,
+original_transaction_ref_num,expense_date,expense_person,expense_category,expense_amount,expense_quantity,expense_description
+,2025-07-01,Butt Fitness,General,1600000.0,13.0,Gym Strength
+BTC-386836/25,2025-07-08,Barkat Trading Corporation,General,195000.0,1.0,BTC-386836/25
+BTC-38742/25,2025-06-27,Barkat Trading Corporation,General,5625000.0,1.0,BTC-38742/25
+BTC-386741/25,2025-06-27,Barkat Trading Corporation,General,487500.0,1.0,BTC-386741/25
+BTC-62548/25,2025-05-30,Barkat Trading Corporation,General,2933000.0,1.0,BTC-62548/25
+BTC-62765/25,2025-06-11,Barkat Trading Corporation,General,3300000.0,1.0,BTC-62765/25
+386645/25,2025-06-10,Barkat Trading Corporation,General,421500.0,1.0,386645/25
+BTC-62549/25,2025-05-30,Barkat Trading Corporation,General,19400.0,1.0,BTC-62549/25
+BTC-386740/25,2025-06-21,Barkat Trading Corporation,General,105100.0,1.0,BTC-386740/25
+BTC-386718/25,2025-06-21,Barkat Trading Corporation,General,368000.0,1.0,BTC-386718/25
+BTC-62905/25,2025-06-20,Barkat Trading Corporation,General,1705000.0,1.0,BTC-62905/25
+# 386735/25,2025-06-19,Barkat Trading Corporation,General,1051000.0,1.0,# 386735/25
+#386715/25,2025-06-19,Barkat Trading Corporation,General,325000.0,1.0,#386715/25
+BTC-62819/25,2025-06-16,Barkat Trading Corporation,General,134000.0,1.0,BTC-62819/25
+BTC-62815/25,2025-06-16,Barkat Trading Corporation,General,5115000.0,1.0,BTC-62815/25
+BTC-62804/25,2025-06-16,Barkat Trading Corporation,General,1705000.0,1.0,BTC-62804/25
+BTC-62791/25,2025-06-13,Barkat Trading Corporation,General,6820000.0,1.0,BTC-62791/25
+BTC-62788/25,2025-06-13,Barkat Trading Corporation,General,1705000.0,1.0,BTC-62788/25
+386622/25,2025-06-12,Barkat Trading Corporation,General,4023927.6,1.0,386622/25
+386631/25,2025-05-17,Barkat Trading Corporation,General,2088000.0,1.0,386631/25
