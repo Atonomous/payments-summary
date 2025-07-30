@@ -45,3 +45,4 @@ date,person,amount,type,status,description,payment_method,reference_number,chequ
 2025-06-16,Rehmat Lawn Mover,8000000.0,i_paid,completed,Faysal Bank,cash,CA0000000016,,completed
 2025-06-21,Rehmat Lawn Mover,34000.0,i_paid,completed,on data,cash,invoice #BTC-386718,,completed
 2025-06-26,Rehmat Lawn Mover,6000000.0,i_paid,completed,Faysal Bank,cash,CA0000000019,,completed
+2025-06-27,Rehmat Lawn Mover,4000000.0,i_paid,completed,Faysal Bank,cash,CA00000000021,,completed
