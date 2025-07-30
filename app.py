@@ -168,7 +168,8 @@ def init_files():
             if 'expense_quantity' in df_exp.columns: # Ensure quantity is numeric
                 df_exp['expense_quantity'] = pd.to_numeric(df_exp['expense_quantity'], errors='coerce').fillna(1.0)
             if 'expense_date' in df_exp.columns:
-                df_exp['expense_date'] = pd.to_datetime(df_exp['expense_date'], errors='coerce').dt.strftime('%Y-%m-%d').fillna('')
+                # Parse to datetime, but don't format here. Formatting will happen at display time.
+                df_exp['expense_date'] = pd.to_datetime(df_exp['expense_date'], errors='coerce')
             df_exp.to_csv(CLIENT_EXPENSES_FILE, index=False)
             st.toast("Client expenses data cleaned and saved.")
 
@@ -279,7 +280,11 @@ def generate_html_summary(df):
             client_expenses_df_all = pd.read_csv(CLIENT_EXPENSES_FILE, dtype={'original_transaction_ref_num': str, 'expense_person': str}, keep_default_na=False)
             client_expenses_df_all['expense_amount'] = pd.to_numeric(client_expenses_df_all['expense_amount'], errors='coerce').fillna(0.0)
             client_expenses_df_all['expense_person'] = client_expenses_df_all['expense_person'].astype(str)
-            client_expenses_df_all['expense_date'] = pd.to_datetime(client_expenses_df_all['expense_date'], errors='coerce').dt.strftime('%Y-%m-%d').fillna('')
+            
+            # Parse to datetime first, then format for display
+            client_expenses_df_all['expense_date_parsed'] = pd.to_datetime(client_expenses_df_all['expense_date'], errors='coerce')
+            client_expenses_df_all['expense_date_display'] = client_expenses_df_all['expense_date_parsed'].dt.strftime('%Y-%m-%d').fillna('-')
+
             # Ensure expense_quantity is loaded and cleaned
             if 'expense_quantity' not in client_expenses_df_all.columns:
                 client_expenses_df_all['expense_quantity'] = 1.0
@@ -377,7 +382,7 @@ def generate_html_summary(df):
             for idx, row in client_expenses_df_all.iterrows():
                 detailed_expenses_html += f"""
                     <tr>
-                        <td>{row['expense_date']}</td>
+                        <td>{row['expense_date_display']}</td>
                         <td>{row['expense_person']}</td>
                         <td>{row['expense_category']}</td>
                         <td>Rs. {row['expense_amount']:,.2f}</td>
@@ -1377,10 +1382,7 @@ def generate_invoice_pdf(person_name, transactions_df, start_date=None, end_date
 
         pdf.ln(10)
 
-        if pdf.get_y() + 30 > pdf.h - 35:
-            pdf.add_page()
-            pdf.ln(20)
-
+        # Adjusted positioning for "Total Amount"
         pdf.set_font("Arial", "B", size=14)
         pdf.set_text_color(0, 123, 255)
         
@@ -1389,11 +1391,57 @@ def generate_invoice_pdf(person_name, transactions_df, start_date=None, end_date
         total_label_span_width = sum(col_widths[:-1]) # Sum of all widths except the last one (Line Total)
 
         pdf.set_x(pdf.l_margin) # Start from the left margin
-        pdf.cell(total_label_span_width, 10, "Total Amount:", 0, 0, 'R') # Right align label within its span
+        pdf.cell(total_label_span_width, 10, "Total Invoice Amount:", 0, 0, 'R') # Right align label within its span
 
         # Print the total amount value in the last column's space
         pdf.cell(col_widths[8], 10, f"Rs. {total_invoice_amount:,.2f}", 0, 1, 'R') # Right align value in the last column
-        pdf.ln(20)
+        pdf.ln(10) # Add some space after the invoice total
+
+
+        # --- Add Client Balance Summary to PDF ---
+        pdf.set_font("Arial", "B", size=12)
+        pdf.set_text_color(52, 73, 94)
+        pdf.cell(0, 10, "Client Account Summary:", ln=True)
+        pdf.set_font("Arial", size=10)
+        pdf.set_text_color(85, 85, 85)
+
+        # Load all payments and client expenses to calculate overall balance for this person
+        all_payments_df = pd.read_csv(CSV_FILE, dtype={'reference_number': str}, keep_default_na=False)
+        all_payments_df['amount'] = pd.to_numeric(all_payments_df['amount'], errors='coerce').fillna(0.0)
+        all_payments_df['person'] = all_payments_df['person'].astype(str)
+        all_payments_df['type'] = all_payments_df['type'].astype(str).str.lower()
+
+        total_paid_to_client_overall = all_payments_df[
+            (all_payments_df['person'] == person_name) &
+            (all_payments_df['type'] == 'i_paid')
+        ]['amount'].sum()
+
+        all_client_expenses_df = pd.DataFrame()
+        if os.path.exists(CLIENT_EXPENSES_FILE) and os.path.getsize(CLIENT_EXPENSES_FILE) > 0:
+            all_client_expenses_df = pd.read_csv(CLIENT_EXPENSES_FILE, dtype={'expense_amount': float, 'expense_quantity': float}, keep_default_na=False)
+            all_client_expenses_df['expense_amount'] = pd.to_numeric(all_client_expenses_df['expense_amount'], errors='coerce').fillna(0.0)
+            all_client_expenses_df['expense_quantity'] = pd.to_numeric(all_client_expenses_df['expense_quantity'], errors='coerce').fillna(1.0)
+            all_client_expenses_df['total_line_amount'] = all_client_expenses_df['expense_amount'] * all_client_expenses_df['expense_quantity']
+            all_client_expenses_df['expense_person'] = all_client_expenses_df['expense_person'].astype(str)
+
+        total_expenses_by_client_overall = all_client_expenses_df[
+            all_client_expenses_df['expense_person'] == person_name
+        ]['total_line_amount'].sum()
+
+        net_balance_client = total_paid_to_client_overall - total_expenses_by_client_overall
+
+        pdf.cell(0, 7, f"Total Paid to Client: Rs. {total_paid_to_client_overall:,.2f}", ln=True)
+        pdf.cell(0, 7, f"Total Client Expenses: Rs. {total_expenses_by_client_overall:,.2f}", ln=True)
+        
+        balance_text_color = (40, 167, 69) if net_balance_client >= 0 else (220, 53, 69) # Green for positive, Red for negative
+        pdf.set_text_color(*balance_text_color)
+        pdf.set_font("Arial", "B", size=12)
+        pdf.cell(0, 10, f"Net Balance (Paid - Spent): Rs. {net_balance_client:,.2f}", ln=True)
+        pdf.set_text_color(85, 85, 85) # Reset color for subsequent text
+        pdf.set_font("Arial", size=10)
+        pdf.ln(10)
+        # --- End Client Balance Summary ---
+
 
         os.makedirs(INVOICE_DIR, exist_ok=True)
         
@@ -1670,6 +1718,46 @@ with tab2:
         if not filtered_df_for_display.empty:
             total_displayed_amount = filtered_df_for_display['amount'].sum()
             st.metric("Total Displayed Amount", f"Rs. {total_displayed_amount:,.2f}")
+
+            # --- Client-Specific Net Balance Display (View Transactions Tab) ---
+            if st.session_state['view_person_filter'] != "All":
+                selected_client_name = st.session_state['view_person_filter']
+                
+                # Calculate total paid to this client
+                total_paid_to_selected_client = df[
+                    (df['person'] == selected_client_name) &
+                    (df['type'] == 'i_paid')
+                ]['amount'].sum()
+
+                # Calculate total expenses by this client
+                client_expenses_df_view = pd.DataFrame()
+                if os.path.exists(CLIENT_EXPENSES_FILE) and os.path.getsize(CLIENT_EXPENSES_FILE) > 0:
+                    client_expenses_df_view = pd.read_csv(CLIENT_EXPENSES_FILE, dtype={'expense_amount': float, 'expense_quantity': float}, keep_default_na=False)
+                    client_expenses_df_view['expense_amount'] = pd.to_numeric(client_expenses_df_view['expense_amount'], errors='coerce').fillna(0.0)
+                    if 'expense_quantity' not in client_expenses_df_view.columns:
+                        client_expenses_df_view['expense_quantity'] = 1.0
+                    client_expenses_df_view['expense_quantity'] = pd.to_numeric(client_expenses_df_view['expense_quantity'], errors='coerce').fillna(1.0)
+                    client_expenses_df_view['total_line_amount'] = client_expenses_df_view['expense_amount'] * client_expenses_df_view['expense_quantity']
+                    client_expenses_df_view['expense_person'] = client_expenses_df_view['expense_person'].astype(str)
+
+                total_expenses_by_selected_client = client_expenses_df_view[
+                    client_expenses_df_view['expense_person'] == selected_client_name
+                ]['total_line_amount'].sum()
+
+                net_balance_for_selected_client = total_paid_to_selected_client - total_expenses_by_selected_client
+
+                st.markdown("---")
+                st.subheader(f"Client-Specific Net Balance for {selected_client_name}")
+                col_client_bal1, col_client_bal2, col_client_bal3 = st.columns(3)
+                with col_client_bal1:
+                    st.metric("Total Paid to Client", f"Rs. {total_paid_to_selected_client:,.2f}")
+                with col_client_bal2:
+                    st.metric("Total Expenses by Client", f"Rs. {total_expenses_by_selected_client:,.2f}")
+                with col_client_bal3:
+                    st.metric("Net Balance (Paid - Spent)", f"Rs. {net_balance_for_selected_client:,.2f}", 
+                              delta_color="inverse" if net_balance_for_selected_client < 0 else "normal")
+            # --- End Client-Specific Net Balance Display ---
+
 
             st.dataframe(
                 filtered_df_for_display[list(display_columns.keys())].rename(columns=display_columns),
@@ -1992,7 +2080,12 @@ with tab3:
             client_expenses_df_all = pd.read_csv(CLIENT_EXPENSES_FILE, dtype={'original_transaction_ref_num': str, 'expense_person': str}, keep_default_na=False)
             client_expenses_df_all['expense_amount'] = pd.to_numeric(client_expenses_df_all['expense_amount'], errors='coerce').fillna(0.0)
             client_expenses_df_all['expense_person'] = client_expenses_df_all['expense_person'].astype(str)
-            client_expenses_df_all['expense_date'] = pd.to_datetime(client_expenses_df_all['expense_date'], errors='coerce').dt.strftime('%Y-%m-%d').fillna('')
+            
+            # Parse to datetime first, then format for display
+            client_expenses_df_all['expense_date_parsed'] = pd.to_datetime(client_expenses_df_all['expense_date'], errors='coerce')
+            client_expenses_df_all['expense_date_display'] = client_expenses_df_all['expense_date_parsed'].dt.strftime('%Y-%m-%d').fillna('-')
+
+
             # Ensure expense_quantity is loaded and cleaned
             if 'expense_quantity' not in client_expenses_df_all.columns:
                 client_expenses_df_all['expense_quantity'] = 1.0
@@ -2047,8 +2140,8 @@ with tab3:
             if not client_expenses_df_all.empty:
                 st.dataframe(
                     client_expenses_df_all[[
-                        'expense_date', 'expense_person', 'expense_category', 'expense_amount', 'expense_quantity', 'total_line_amount', 'expense_description'
-                    ]].style.format({
+                        'expense_date_display', 'expense_person', 'expense_category', 'expense_amount', 'expense_quantity', 'total_line_amount', 'expense_description'
+                    ]].rename(columns={'expense_date_display': 'Expense Date'}).style.format({
                         'expense_amount': "Rs. {:,.2f}",
                         'expense_quantity': "{:,.0f}", # Format quantity
                         'total_line_amount': "Rs. {:,.2f}" # Format total line amount
@@ -2296,8 +2389,9 @@ try:
 
             st.sidebar.metric("Total Received", f"Rs. {rec:,.2f}")
             st.sidebar.metric("Total Paid (by me)", f"Rs. {paid:,.2f}")
-            st.sidebar.metric("Total Client Expenses", f"Rs. {total_client_expenses_for_sidebar:,.2f}")
-            st.sidebar.metric("Net Balance (Paid - Spent)", f"Rs. {paid - total_client_expenses_for_sidebar:,.2f}", delta_color="inverse")
+            # Removed client expenses and net balance from sidebar as per user request
+            # st.sidebar.metric("Total Client Expenses", f"Rs. {total_client_expenses_for_sidebar:,.2f}")
+            # st.sidebar.metric("Net Balance (Paid - Spent)", f"Rs. {paid - total_client_expenses_for_sidebar:,.2f}", delta_color="inverse")
 
             with st.sidebar.expander("Payment Methods"):
                 st.write("**Received**")
