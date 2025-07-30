@@ -34,3 +34,4 @@ date,person,amount,type,status,description,payment_method,reference_number,chequ
 2025-05-29,Rehmat Lawn Mover,2000000.0,i_paid,completed,The Bank Of Punjab,cheque,8035950491,received/given,completed
 2025-05-23,Rehmat Lawn Mover,500000.0,i_paid,completed,Bank Alfa,cash,#FT25144151S9SG8V,,completed
 2025-05-23,Rehmat Lawn Mover,1500000.0,i_paid,completed,Meezan Bank,cash,297570,,completed
+2025-05-09,Rehmat Lawn Mover,5000000.0,i_paid,completed,Faysal Bank,cheque,3090301000001477,received/given,completed
