@@ -440,7 +440,9 @@
             .detailed-expenses-table td:nth-of-type(2):before { content: "Client Name"; }
             .detailed-expenses-table td:nth-of-type(3):before { content: "Category"; }
             .detailed-expenses-table td:nth-of-type(4):before { content: "Amount"; }
-            .detailed-expenses-table td:nth-of-type(5):before { content: "Description"; }
+            td:nth-of-type(5):before { content: "Quantity"; } /* New media query label */
+            td:nth-of-type(6):before { content: "Total Line Amount"; } /* New media query label */
+            .detailed-expenses-table td:nth-of-type(7):before { content: "Description"; }
         }
 
         @media print {
@@ -531,6 +533,7 @@
             const referenceNumber = $('#reference-number-filter').val().toLowerCase();
 
             let visibleRows = 0;
+            let totalAmount = 0; // Initialize total amount for filtered transactions
 
             $('#transactions-table tbody tr').each(function() {
                 const rowDate = $(this).data('date');
@@ -539,6 +542,7 @@
                 const rowMethod = $(this).data('method').toString().toLowerCase();
                 const rowChequeStatus = $(this).data('cheque-status').toString().toLowerCase();
                 const rowReferenceNumber = $(this).data('reference-number').toString().toLowerCase();
+                const rowAmount = parseFloat($(this).data('amount-raw')); // Get raw amount for calculation
 
                 const datePass = (!startDate || rowDate >= startDate) && (!endDate || rowDate <= endDate);
                 const personPass = !person || rowPerson.includes(person);
@@ -550,10 +554,15 @@
                 if (datePass && personPass && typePass && methodPass && chequeStatusPass && referenceNumberPass) {
                     $(this).show();
                     visibleRows++;
+                    totalAmount += rowAmount; // Add to total if visible
                 } else {
                     $(this).hide();
                 }
             });
+
+            // Update the total amount display
+            $('#total-displayed-amount').text('Rs. ' + totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+
 
             if (visibleRows === 0) {
                 $('#no-results').show();
@@ -562,6 +571,20 @@
                 $('#no-results').hide();
                 $('#transactions-table').show();
             }
+        }
+
+        function resetFilters() {
+            const today = new Date();
+            const oneMonthAgo = new Date();
+            oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+            $('#start-date').val(oneMonthAgo.toISOString().split('T')[0]);
+            $('#end-date').val(today.toISOString().split('T')[0]);
+            $('#name-filter').val('');
+            $('#type-filter').val('');
+            $('#method-filter').val('');
+            $('#status-filter').val('');
+            $('#reference-number-filter').val('');
+            applyFilters(); // Re-apply filters after resetting
         }
 
         function downloadPdf() {
@@ -577,7 +600,7 @@
             </div>
             <h1 class="report-title">Payment Summary Report</h1>
             <div class="report-date">
-                <i class="far fa-calendar-alt"></i> July 30, 2025 at 12:40 PM
+                <i class="far fa-calendar-alt"></i> July 30, 2025 at 01:20 PM
             </div>
         </header>
 
@@ -716,6 +739,9 @@
                     <h2 class="section-title">
                         <i class="fas fa-list"></i> All Transactions
                     </h2>
+                    <div style="text-align: right; margin-bottom: 10px; font-weight: bold; font-size: 1.2em; color: #34495e;">
+                        Total Displayed Amount: <span id="total-displayed-amount">Rs. 0.00</span>
+                    </div>
                     <div class="no-results" id="no-results">
                         <i class="fas fa-search" style="font-size: 24px; margin-bottom: 10px;"></i>
                         <p>No transactions match your filters</p>
@@ -741,7 +767,8 @@
                                 data-type="i_paid"
                                 data-method="cash"
                                 data-cheque-status=""
-                                data-reference-number="764206">
+                                data-reference-number="764206"
+                                data-amount-raw="500000.0">
                                 <td>2025-02-05</td>
                                 <td>Butt Fitness</td>
                                 <td>Rs. 500,000.00</td>
@@ -757,7 +784,8 @@
                                 data-type="i_paid"
                                 data-method="cash"
                                 data-cheque-status=""
-                                data-reference-number="360842">
+                                data-reference-number="360842"
+                                data-amount-raw="1000000.0">
                                 <td>2025-11-05</td>
                                 <td>Butt Fitness</td>
                                 <td>Rs. 1,000,000.00</td>
@@ -773,7 +801,8 @@
                                 data-type="i_paid"
                                 data-method="cash"
                                 data-cheque-status=""
-                                data-reference-number="326547">
+                                data-reference-number="326547"
+                                data-amount-raw="1100000.0">
                                 <td>2025-05-13</td>
                                 <td>Butt Fitness</td>
                                 <td>Rs. 1,100,000.00</td>
@@ -789,7 +818,8 @@
                                 data-type="i_paid"
                                 data-method="cash"
                                 data-cheque-status=""
-                                data-reference-number="494860">
+                                data-reference-number="494860"
+                                data-amount-raw="650000.0">
                                 <td>2025-05-19</td>
                                 <td>Butt Fitness</td>
                                 <td>Rs. 650,000.00</td>
@@ -805,7 +835,8 @@
                                 data-type="i_paid"
                                 data-method="cash"
                                 data-cheque-status=""
-                                data-reference-number="#ft251490rr2l3q2x">
+                                data-reference-number="#ft251490rr2l3q2x"
+                                data-amount-raw="750000.0">
                                 <td>2025-05-19</td>
                                 <td>Butt Fitness</td>
                                 <td>Rs. 750,000.00</td>
@@ -821,7 +852,8 @@
                                 data-type="i_paid"
                                 data-method="cash"
                                 data-cheque-status=""
-                                data-reference-number="593031">
+                                data-reference-number="593031"
+                                data-amount-raw="1000000.0">
                                 <td>2025-05-30</td>
                                 <td>Butt Fitness</td>
                                 <td>Rs. 1,000,000.00</td>
@@ -837,7 +869,8 @@
                                 data-type="i_paid"
                                 data-method="cash"
                                 data-cheque-status=""
-                                data-reference-number="483955">
+                                data-reference-number="483955"
+                                data-amount-raw="1000000.0">
                                 <td>2025-06-06</td>
                                 <td>Butt Fitness</td>
                                 <td>Rs. 1,000,000.00</td>
@@ -853,7 +886,8 @@
                                 data-type="i_paid"
                                 data-method="cash"
                                 data-cheque-status=""
-                                data-reference-number="ca0000000011">
+                                data-reference-number="ca0000000011"
+                                data-amount-raw="3000000.0">
                                 <td>2025-05-06</td>
                                 <td>Butt Fitness</td>
                                 <td>Rs. 3,000,000.00</td>
@@ -869,7 +903,8 @@
                                 data-type="i_paid"
                                 data-method="cash"
                                 data-cheque-status=""
-                                data-reference-number="ca0000000039">
+                                data-reference-number="ca0000000039"
+                                data-amount-raw="2500000.0">
                                 <td>2025-09-05</td>
                                 <td>Butt Fitness</td>
                                 <td>Rs. 2,500,000.00</td>
@@ -885,7 +920,8 @@
                                 data-type="i_paid"
                                 data-method="cash"
                                 data-cheque-status=""
-                                data-reference-number="378200">
+                                data-reference-number="378200"
+                                data-amount-raw="3000000.0">
                                 <td>2025-06-16</td>
                                 <td>Butt Fitness</td>
                                 <td>Rs. 3,000,000.00</td>
@@ -901,7 +937,8 @@
                                 data-type="i_paid"
                                 data-method="cash"
                                 data-cheque-status=""
-                                data-reference-number="216760">
+                                data-reference-number="216760"
+                                data-amount-raw="3000000.0">
                                 <td>2025-06-23</td>
                                 <td>Butt Fitness</td>
                                 <td>Rs. 3,000,000.00</td>
@@ -917,7 +954,8 @@
                                 data-type="i_paid"
                                 data-method="cash"
                                 data-cheque-status=""
-                                data-reference-number="505213">
+                                data-reference-number="505213"
+                                data-amount-raw="2000000.0">
                                 <td>2025-06-26</td>
                                 <td>Butt Fitness</td>
                                 <td>Rs. 2,000,000.00</td>
@@ -933,7 +971,8 @@
                                 data-type="i_paid"
                                 data-method="cash"
                                 data-cheque-status=""
-                                data-reference-number="416723">
+                                data-reference-number="416723"
+                                data-amount-raw="1000000.0">
                                 <td>2025-01-07</td>
                                 <td>Butt Fitness</td>
                                 <td>Rs. 1,000,000.00</td>
@@ -949,7 +988,8 @@
                                 data-type="i_paid"
                                 data-method="cash"
                                 data-cheque-status=""
-                                data-reference-number="842448">
+                                data-reference-number="842448"
+                                data-amount-raw="500000.0">
                                 <td>2025-08-07</td>
                                 <td>Butt Fitness</td>
                                 <td>Rs. 500,000.00</td>
@@ -965,7 +1005,8 @@
                                 data-type="i_paid"
                                 data-method="cash"
                                 data-cheque-status=""
-                                data-reference-number="#ft251910xxptdwxq">
+                                data-reference-number="#ft251910xxptdwxq"
+                                data-amount-raw="400000.0">
                                 <td>2025-09-07</td>
                                 <td>Butt Fitness</td>
                                 <td>Rs. 400,000.00</td>
@@ -981,7 +1022,8 @@
                                 data-type="i_paid"
                                 data-method="cash"
                                 data-cheque-status=""
-                                data-reference-number="411625">
+                                data-reference-number="411625"
+                                data-amount-raw="200000.0">
                                 <td>2025-07-25</td>
                                 <td>Butt Fitness</td>
                                 <td>Rs. 200,000.00</td>
@@ -997,7 +1039,8 @@
                                 data-type="i_paid"
                                 data-method="cash"
                                 data-cheque-status=""
-                                data-reference-number="230902">
+                                data-reference-number="230902"
+                                data-amount-raw="100000.0">
                                 <td>2025-04-17</td>
                                 <td>H.M. Fitness</td>
                                 <td>Rs. 100,000.00</td>
@@ -1013,7 +1056,8 @@
                                 data-type="i_paid"
                                 data-method="cash"
                                 data-cheque-status=""
-                                data-reference-number="577478">
+                                data-reference-number="577478"
+                                data-amount-raw="500000.0">
                                 <td>2025-05-17</td>
                                 <td>H.M. Fitness</td>
                                 <td>Rs. 500,000.00</td>
@@ -1029,7 +1073,8 @@
                                 data-type="i_paid"
                                 data-method="cash"
                                 data-cheque-status=""
-                                data-reference-number="ft2514101nwfdlbp">
+                                data-reference-number="ft2514101nwfdlbp"
+                                data-amount-raw="500000.0">
                                 <td>2025-05-20</td>
                                 <td>H.M. Fitness</td>
                                 <td>Rs. 500,000.00</td>
@@ -1045,7 +1090,8 @@
                                 data-type="i_paid"
                                 data-method="cash"
                                 data-cheque-status=""
-                                data-reference-number="798625">
+                                data-reference-number="798625"
+                                data-amount-raw="500000.0">
                                 <td>2025-05-06</td>
                                 <td>H.M. Fitness</td>
                                 <td>Rs. 500,000.00</td>
@@ -1061,7 +1107,8 @@
                                 data-type="i_paid"
                                 data-method="cash"
                                 data-cheque-status=""
-                                data-reference-number="499282">
+                                data-reference-number="499282"
+                                data-amount-raw="1000000.0">
                                 <td>2025-05-31</td>
                                 <td>H.M. Fitness</td>
                                 <td>Rs. 1,000,000.00</td>
@@ -1077,7 +1124,8 @@
                                 data-type="i_paid"
                                 data-method="cash"
                                 data-cheque-status=""
-                                data-reference-number="373827">
+                                data-reference-number="373827"
+                                data-amount-raw="1000000.0">
                                 <td>2025-06-16</td>
                                 <td>H.M. Fitness</td>
                                 <td>Rs. 1,000,000.00</td>
@@ -1093,7 +1141,8 @@
                                 data-type="i_paid"
                                 data-method="cash"
                                 data-cheque-status=""
-                                data-reference-number="509991">
+                                data-reference-number="509991"
+                                data-amount-raw="532000.0">
                                 <td>2025-06-21</td>
                                 <td>H.M. Fitness</td>
                                 <td>Rs. 532,000.00</td>
@@ -1109,7 +1158,8 @@
                                 data-type="i_paid"
                                 data-method="cash"
                                 data-cheque-status=""
-                                data-reference-number="425398">
+                                data-reference-number="425398"
+                                data-amount-raw="500000.0">
                                 <td>2025-06-25</td>
                                 <td>H.M. Fitness</td>
                                 <td>Rs. 500,000.00</td>
@@ -1125,7 +1175,8 @@
                                 data-type="i_paid"
                                 data-method="cheque"
                                 data-cheque-status="processing done"
-                                data-reference-number="ca0000000024">
+                                data-reference-number="ca0000000024"
+                                data-amount-raw="800000.0">
                                 <td>2025-01-07</td>
                                 <td>H.M. Fitness</td>
                                 <td>Rs. 800,000.00</td>
@@ -1141,7 +1192,8 @@
                                 data-type="i_paid"
                                 data-method="cash"
                                 data-cheque-status=""
-                                data-reference-number="52372192">
+                                data-reference-number="52372192"
+                                data-amount-raw="700000.0">
                                 <td>2025-02-07</td>
                                 <td>H.M. Fitness</td>
                                 <td>Rs. 700,000.00</td>
@@ -1157,7 +1209,8 @@
                                 data-type="i_paid"
                                 data-method="cash"
                                 data-cheque-status=""
-                                data-reference-number="12345">
+                                data-reference-number="12345"
+                                data-amount-raw="5000000.0">
                                 <td>2025-01-15</td>
                                 <td>Rehmat Lawn Mover</td>
                                 <td>Rs. 5,000,000.00</td>
@@ -1173,7 +1226,8 @@
                                 data-type="i_paid"
                                 data-method="cash"
                                 data-cheque-status=""
-                                data-reference-number="123456">
+                                data-reference-number="123456"
+                                data-amount-raw="5000000.0">
                                 <td>2025-01-22</td>
                                 <td>Rehmat Lawn Mover</td>
                                 <td>Rs. 5,000,000.00</td>
@@ -1189,7 +1243,8 @@
                                 data-type="i_paid"
                                 data-method="cash"
                                 data-cheque-status=""
-                                data-reference-number="#ft252070yq608wy">
+                                data-reference-number="#ft252070yq608wy"
+                                data-amount-raw="1000000.0">
                                 <td>2025-07-26</td>
                                 <td>Rehmat Lawn Mover</td>
                                 <td>Rs. 1,000,000.00</td>
@@ -1205,7 +1260,8 @@
                                 data-type="i_paid"
                                 data-method="cheque"
                                 data-cheque-status="received/given"
-                                data-reference-number="ca0000000007">
+                                data-reference-number="ca0000000007"
+                                data-amount-raw="2000000.0">
                                 <td>2025-06-03</td>
                                 <td>Rehmat Lawn Mover</td>
                                 <td>Rs. 2,000,000.00</td>
@@ -1221,7 +1277,8 @@
                                 data-type="i_paid"
                                 data-method="cheque"
                                 data-cheque-status="processing done"
-                                data-reference-number="ca0000000004">
+                                data-reference-number="ca0000000004"
+                                data-amount-raw="1550000.0">
                                 <td>2025-05-31</td>
                                 <td>Rehmat Lawn Mover</td>
                                 <td>Rs. 1,550,000.00</td>
@@ -1237,7 +1294,8 @@
                                 data-type="i_paid"
                                 data-method="cheque"
                                 data-cheque-status="received/given"
-                                data-reference-number="8035950489">
+                                data-reference-number="8035950489"
+                                data-amount-raw="3060000.0">
                                 <td>2025-05-29</td>
                                 <td>Rehmat Lawn Mover</td>
                                 <td>Rs. 3,060,000.00</td>
@@ -1253,7 +1311,8 @@
                                 data-type="i_paid"
                                 data-method="cheque"
                                 data-cheque-status="received/given"
-                                data-reference-number="8035950491">
+                                data-reference-number="8035950491"
+                                data-amount-raw="2000000.0">
                                 <td>2025-05-29</td>
                                 <td>Rehmat Lawn Mover</td>
                                 <td>Rs. 2,000,000.00</td>
@@ -1269,7 +1328,8 @@
                                 data-type="i_paid"
                                 data-method="cash"
                                 data-cheque-status=""
-                                data-reference-number="#ft25144151s9sg8v">
+                                data-reference-number="#ft25144151s9sg8v"
+                                data-amount-raw="500000.0">
                                 <td>2025-05-23</td>
                                 <td>Rehmat Lawn Mover</td>
                                 <td>Rs. 500,000.00</td>
@@ -1285,7 +1345,8 @@
                                 data-type="i_paid"
                                 data-method="cash"
                                 data-cheque-status=""
-                                data-reference-number="297570">
+                                data-reference-number="297570"
+                                data-amount-raw="1500000.0">
                                 <td>2025-05-23</td>
                                 <td>Rehmat Lawn Mover</td>
                                 <td>Rs. 1,500,000.00</td>
@@ -1301,7 +1362,8 @@
                                 data-type="i_paid"
                                 data-method="cheque"
                                 data-cheque-status="received/given"
-                                data-reference-number="3090301000001477">
+                                data-reference-number="3090301000001477"
+                                data-amount-raw="5000000.0">
                                 <td>2025-05-09</td>
                                 <td>Rehmat Lawn Mover</td>
                                 <td>Rs. 5,000,000.00</td>
@@ -1317,7 +1379,8 @@
                                 data-type="i_paid"
                                 data-method="cash"
                                 data-cheque-status=""
-                                data-reference-number="1200000">
+                                data-reference-number="1200000"
+                                data-amount-raw="2000000.0">
                                 <td>2025-07-11</td>
                                 <td>Rehmat Lawn Mover</td>
                                 <td>Rs. 2,000,000.00</td>
@@ -1333,7 +1396,8 @@
                                 data-type="i_paid"
                                 data-method="cash"
                                 data-cheque-status=""
-                                data-reference-number="invoice -386511">
+                                data-reference-number="invoice -386511"
+                                data-amount-raw="2900000.0">
                                 <td>2025-05-12</td>
                                 <td>Barkat Trading Corporation</td>
                                 <td>Rs. 2,900,000.00</td>
@@ -1349,7 +1413,8 @@
                                 data-type="i_paid"
                                 data-method="cash"
                                 data-cheque-status=""
-                                data-reference-number="invoice -386631">
+                                data-reference-number="invoice -386631"
+                                data-amount-raw="500000.0">
                                 <td>2025-05-17</td>
                                 <td>Barkat Trading Corporation</td>
                                 <td>Rs. 500,000.00</td>
@@ -1365,7 +1430,8 @@
                                 data-type="i_paid"
                                 data-method="cash"
                                 data-cheque-status=""
-                                data-reference-number="invoice -62548">
+                                data-reference-number="invoice -62548"
+                                data-amount-raw="3000000.0">
                                 <td>2025-05-30</td>
                                 <td>Barkat Trading Corporation</td>
                                 <td>Rs. 3,000,000.00</td>
@@ -1381,7 +1447,8 @@
                                 data-type="i_paid"
                                 data-method="cash"
                                 data-cheque-status=""
-                                data-reference-number="invoice - 386621">
+                                data-reference-number="invoice - 386621"
+                                data-amount-raw="5000000.0">
                                 <td>2025-06-02</td>
                                 <td>Barkat Trading Corporation</td>
                                 <td>Rs. 5,000,000.00</td>
@@ -1397,7 +1464,8 @@
                                 data-type="i_paid"
                                 data-method="cash"
                                 data-cheque-status=""
-                                data-reference-number="ca0000000012">
+                                data-reference-number="ca0000000012"
+                                data-amount-raw="5000000.0">
                                 <td>2025-06-12</td>
                                 <td>Rehmat Lawn Mover</td>
                                 <td>Rs. 5,000,000.00</td>
@@ -1413,7 +1481,8 @@
                                 data-type="i_paid"
                                 data-method="cash"
                                 data-cheque-status=""
-                                data-reference-number="ca0000000015">
+                                data-reference-number="ca0000000015"
+                                data-amount-raw="8000000.0">
                                 <td>2025-06-14</td>
                                 <td>Rehmat Lawn Mover</td>
                                 <td>Rs. 8,000,000.00</td>
@@ -1429,7 +1498,8 @@
                                 data-type="i_paid"
                                 data-method="cash"
                                 data-cheque-status=""
-                                data-reference-number="ca0000000016">
+                                data-reference-number="ca0000000016"
+                                data-amount-raw="8000000.0">
                                 <td>2025-06-16</td>
                                 <td>Rehmat Lawn Mover</td>
                                 <td>Rs. 8,000,000.00</td>
@@ -1445,7 +1515,8 @@
                                 data-type="i_paid"
                                 data-method="cash"
                                 data-cheque-status=""
-                                data-reference-number="invoice #btc-386718">
+                                data-reference-number="invoice #btc-386718"
+                                data-amount-raw="34000.0">
                                 <td>2025-06-21</td>
                                 <td>Rehmat Lawn Mover</td>
                                 <td>Rs. 34,000.00</td>
@@ -1461,7 +1532,8 @@
                                 data-type="i_paid"
                                 data-method="cash"
                                 data-cheque-status=""
-                                data-reference-number="ca0000000019">
+                                data-reference-number="ca0000000019"
+                                data-amount-raw="6000000.0">
                                 <td>2025-06-26</td>
                                 <td>Rehmat Lawn Mover</td>
                                 <td>Rs. 6,000,000.00</td>
@@ -1477,7 +1549,8 @@
                                 data-type="i_paid"
                                 data-method="cash"
                                 data-cheque-status=""
-                                data-reference-number="ca00000000021">
+                                data-reference-number="ca00000000021"
+                                data-amount-raw="4000000.0">
                                 <td>2025-06-27</td>
                                 <td>Rehmat Lawn Mover</td>
                                 <td>Rs. 4,000,000.00</td>
@@ -1493,7 +1566,8 @@
                                 data-type="i_paid"
                                 data-method="cash"
                                 data-cheque-status=""
-                                data-reference-number="ca0000000020">
+                                data-reference-number="ca0000000020"
+                                data-amount-raw="4950000.0">
                                 <td>2025-07-01</td>
                                 <td>Rehmat Lawn Mover</td>
                                 <td>Rs. 4,950,000.00</td>
@@ -1509,7 +1583,8 @@
                                 data-type="i_paid"
                                 data-method="cash"
                                 data-cheque-status=""
-                                data-reference-number="0000000">
+                                data-reference-number="0000000"
+                                data-amount-raw="2500000.0">
                                 <td>2025-07-18</td>
                                 <td>Rehmat Lawn Mover</td>
                                 <td>Rs. 2,500,000.00</td>
@@ -1549,15 +1624,15 @@
                     <tr>
                         <td>Barkat Trading Corporation</td>
                         <td>Rs. 11,400,000.00</td>
-                        <td>Rs. 0.00</td>
-                        <td class="positive-balance">Rs. 11,400,000.00</td>
+                        <td>Rs. 106,226,226.00</td>
+                        <td class="negative-balance">Rs. -94,826,226.00</td>
                     </tr>
                 
                     <tr>
                         <td>Butt Fitness</td>
                         <td>Rs. 21,600,000.00</td>
-                        <td>Rs. 3,200,000.00</td>
-                        <td class="positive-balance">Rs. 18,400,000.00</td>
+                        <td>Rs. 20,800,000.00</td>
+                        <td class="positive-balance">Rs. 800,000.00</td>
                     </tr>
                 
                     <tr>
@@ -1579,13 +1654,18 @@
             
                     
             <h3 class="section-subtitle"><i class="fas fa-list-alt"></i> Detailed Client Expenses</h3>
+            <div style="text-align: right; margin-bottom: 10px; font-weight: bold; font-size: 1.2em; color: #34495e;">
+                Total Client Expenses: Rs. 127,026,226.00
+            </div>
             <table class="detailed-expenses-table">
                 <thead>
                     <tr>
                         <th>Date</th>
                         <th>Client Name</th>
                         <th>Category</th>
-                        <th>Amount</th>
+                        <th>Amount (Unit)</th>
+                        <th>Quantity</th>
+                        <th>Total Line Amount</th>
                         <th>Description</th>
                     </tr>
                 </thead>
@@ -1596,15 +1676,19 @@
                         <td>Butt Fitness</td>
                         <td>General</td>
                         <td>Rs. 1,600,000.00</td>
+                        <td>13</td> <!-- Changed to .0f for integer quantity -->
+                        <td>Rs. 20,800,000.00</td>
                         <td>Gym Strength</td>
                     </tr>
                 
                     <tr>
-                        <td>2025-07-03</td>
-                        <td>Butt Fitness</td>
-                        <td>General</td>
-                        <td>Rs. 1,600,000.00</td>
-                        <td>Gym Strength</td>
+                        <td>2025-07-16</td>
+                        <td>Barkat Trading Corporation</td>
+                        <td>Utilities</td>
+                        <td>Rs. 106,226,226.00</td>
+                        <td>1</td> <!-- Changed to .0f for integer quantity -->
+                        <td>Rs. 106,226,226.00</td>
+                        <td>dfgdf</td>
                     </tr>
                 
                 </tbody>
