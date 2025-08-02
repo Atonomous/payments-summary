@@ -1,8 +1,3 @@
-I have reviewed your `app.py` file and have applied the fixes for the errors you reported. The corrected code is below. You can copy and paste this entire code block to replace the contents of your `app.py` file.
-
-This version addresses the `ValueError: could not convert string to float: ''` by adjusting the `pd.read_csv` `dtype` settings. It also resolves the `NameError: name 'filtered_client_expenses_for_display' is not defined` by ensuring the variable is always initialized before use.
-
-```python
 import streamlit as st
 import pandas as pd
 from datetime import datetime
@@ -14,6 +9,7 @@ from fpdf import FPDF
 import matplotlib.pyplot as plt
 import seaborn as sns
 from io import BytesIO
+import zipfile
 
 # --- Git and CSV File Configuration ---
 # File paths
@@ -46,7 +42,9 @@ def init_state():
         'add_client_expense_status',
         'is_git_repo', 'people_df', 'selected_person_to_add', 'current_tab',
         'selected_per_person_report_person', 'per_person_report_start_date', 'per_person_report_end_date',
-        'selected_per_person_report_tab'
+        'selected_per_person_report_tab',
+        # New keys for the expense bill feature
+        'bill_client_name', 'bill_start_date', 'bill_end_date', 'generated_bill_pdf_path', 'show_bill_download_button'
     ]
     for key in keys:
         if key not in st.session_state:
@@ -111,11 +109,9 @@ def init_files():
         df_exp = pd.read_csv(CLIENT_EXPENSES_FILE,
                              dtype={'original_transaction_ref_num': str, 'expense_person': str},
                              keep_default_na=False)
-        # Fix for `could not convert string to float: ''` error
         df_exp['expense_amount'] = pd.to_numeric(df_exp['expense_amount'], errors='coerce').fillna(0.0)
         df_exp['expense_quantity'] = pd.to_numeric(df_exp['expense_quantity'], errors='coerce').fillna(0.0)
         df_exp['expense_uuid'] = df_exp['expense_uuid'].apply(lambda x: str(uuid.uuid4()) if pd.isna(x) or str(x).strip().lower() == 'nan' else x)
-        # Ensure all columns exist, add if missing
         required_exp_cols = [
             'expense_uuid', 'original_transaction_ref_num', 'expense_person', 'expense_amount',
             'expense_quantity', 'expense_date', 'expense_category', 'expense_status',
@@ -157,10 +153,8 @@ def get_people():
     init_files()  # Ensure files exist before loading
     df_people = load_data(PEOPLE_FILE)
     if not df_people.empty:
-        # Backward compatibility for 'person_type' column
         if 'person_type' not in df_people.columns:
             df_people['person_type'] = 'client'
-        # Sort by person_type then name
         df_people = df_people.sort_values(by=['person_type', 'name']).reset_index(drop=True)
     return df_people
 
@@ -194,18 +188,15 @@ def create_app():
                 if not df_payments.empty:
                     df_payments['amount'] = pd.to_numeric(df_payments['amount'], errors='coerce').fillna(0.0)
 
-                    # Calculate total paid and received
                     paid = df_payments[df_payments['transaction_type'] == 'Paid']['amount'].sum()
                     received = df_payments[df_payments['transaction_type'] == 'Received']['amount'].sum()
                     net_balance = received - paid
 
-                    # Calculate paid/received by payment method
                     cash_rec = df_payments[(df_payments['transaction_type'] == 'Received') & (df_payments['payment_method'] == 'Cash')]['amount'].sum()
                     cheque_rec = df_payments[(df_payments['transaction_type'] == 'Received') & (df_payments['payment_method'] == 'Cheque')]['amount'].sum()
                     cash_paid = df_payments[(df_payments['transaction_type'] == 'Paid') & (df_payments['payment_method'] == 'Cash')]['amount'].sum()
                     cheque_paid = df_payments[(df_payments['transaction_type'] == 'Paid') & (df_payments['payment_method'] == 'Cheque')]['amount'].sum()
 
-                    # Load client expenses
                     if os.path.exists(CLIENT_EXPENSES_FILE):
                         df_client_expenses = load_data(CLIENT_EXPENSES_FILE)
                         if not df_client_expenses.empty:
@@ -245,8 +236,8 @@ def create_app():
             st.success("Mock data loaded. You may need to refresh the page.")
 
     # --- Tabbed Interface ---
-    tab_names = ["Home", "Add Transaction", "View/Edit Transactions", "Add Client Expense", "Client Expense Summary", "Manage People", "Generate Invoice", "Per Person Report"]
-    home_tab, add_transaction_tab, view_edit_tab, add_client_expense_tab, client_expense_summary_tab, manage_people_tab, invoice_tab, report_tab = st.tabs(tab_names)
+    tab_names = ["Home", "Add Transaction", "View/Edit Transactions", "Add Client Expense", "Client Expense Summary", "Manage People", "Generate Invoice", "Generate Expense Bill", "Per Person Report"]
+    home_tab, add_transaction_tab, view_edit_tab, add_client_expense_tab, client_expense_summary_tab, manage_people_tab, invoice_tab, bill_tab, report_tab = st.tabs(tab_names)
 
     with home_tab:
         st.session_state.current_tab = "Home"
@@ -276,6 +267,10 @@ def create_app():
         st.session_state.current_tab = "Generate Invoice"
         render_generate_invoice_tab(df_people)
 
+    with bill_tab:
+        st.session_state.current_tab = "Generate Expense Bill"
+        render_generate_bill_tab(df_people)
+
     with report_tab:
         st.session_state.current_tab = "Per Person Report"
         render_per_person_report_tab(df_people)
@@ -288,7 +283,6 @@ def render_home_tab(df_people):
             df = load_data(CSV_FILE, dtype={'reference_number': str})
             df['amount'] = pd.to_numeric(df['amount'], errors='coerce').fillna(0.0)
             if not df.empty:
-                # Calculate total paid and received
                 total_paid = df[df['transaction_type'] == 'Paid']['amount'].sum()
                 total_received = df[df['transaction_type'] == 'Received']['amount'].sum()
                 net_balance = total_received - total_paid
@@ -302,12 +296,12 @@ def render_home_tab(df_people):
                 st.write(df.style.format({'amount': 'Rs. {:, .2f}'}))
 
                 st.subheader("Payments by Person (Top 10)")
-                # Group by person and sum amounts for both paid and received
                 person_summary = df.groupby('person')['amount'].sum().sort_values(ascending=False).head(10)
                 fig, ax = plt.subplots()
                 person_summary.plot(kind='bar', ax=ax)
                 plt.ylabel("Total Amount")
                 st.pyplot(fig)
+                plt.close(fig)
 
                 st.subheader("Payments by Type")
                 type_summary = df.groupby('transaction_type')['amount'].sum()
@@ -315,7 +309,7 @@ def render_home_tab(df_people):
                 type_summary.plot(kind='pie', autopct='%1.1f%%', ax=ax)
                 plt.ylabel('')
                 st.pyplot(fig)
-
+                plt.close(fig)
             else:
                 st.info("No transactions to display. Add some transactions to see the dashboard.")
         else:
@@ -324,16 +318,13 @@ def render_home_tab(df_people):
     except Exception as e:
         st.error(f"An error occurred while generating the dashboard: {e}")
 
-# ... (rest of the functions remain unchanged, but I'll paste the complete, corrected code below)
-# The logic for `filtered_client_expenses_for_display` is located in `render_client_expense_summary_tab`.
-# I will add the initialization there.
 
 def render_add_transaction_form(df_people):
     """Renders the form to add a new transaction."""
     st.header("Add New Transaction")
     try:
         with st.form("add_transaction_form", clear_on_submit=st.session_state.reset_add_form):
-            st.session_state.reset_add_form = False  # Reset the flag after use
+            st.session_state.reset_add_form = False
 
             col1, col2 = st.columns(2)
             with col1:
@@ -386,7 +377,6 @@ def render_add_transaction_form(df_people):
 
 def add_transaction_logic(df_people):
     """Handles the logic for adding a new transaction."""
-    # ... (function body)
     if st.session_state.add_amount <= 0:
         st.error("Amount must be greater than zero.")
         return
@@ -422,7 +412,6 @@ def render_view_edit_transactions_tab(df_people):
             st.info("No transactions found.")
             return
 
-        # Filters and search
         col1, col2, col3 = st.columns([1, 1, 2])
         with col1:
             all_people_options = ['All'] + sorted(df_people['name'].unique().tolist())
@@ -444,14 +433,12 @@ def render_view_edit_transactions_tab(df_people):
                 filtered_df['reference_number'].str.lower().str.contains(search_text, na=False)
             ]
 
-        # Convert date column to datetime for sorting
         if 'date' in filtered_df.columns:
             filtered_df['date'] = pd.to_datetime(filtered_df['date'], errors='coerce')
             filtered_df = filtered_df.sort_values(by='date', ascending=False)
         else:
             st.warning("Date column not found in data.")
 
-        # Display transactions
         st.subheader("Transactions")
         transactions_to_display = filtered_df.drop(columns=['transaction_uuid'], errors='ignore')
         st.dataframe(transactions_to_display.style.format({'amount': 'Rs. {:, .2f}'}))
@@ -523,7 +510,6 @@ def render_add_client_expense_form(df_people):
     """Renders the form to add a new client expense."""
     st.header("Add New Client Expense")
     try:
-        # Get only client names for the selectbox
         client_names = df_people[df_people['person_type'] == 'client']['name'].tolist()
         if not client_names:
             st.warning("Please add at least one client in the 'Manage People' tab before adding expenses.")
@@ -607,10 +593,8 @@ def render_client_expense_summary_tab(df_people):
             st.info("No client expenses found.")
             return
 
-        # Initialize the DataFrame to avoid NameError
         filtered_client_expenses_for_display = pd.DataFrame()
 
-        # Filters
         with st.expander("Filter Client Expenses"):
             col1, col2, col3, col4 = st.columns(4)
             with col1:
@@ -633,7 +617,6 @@ def render_client_expense_summary_tab(df_people):
 
         filtered_df_exp = df_exp.copy()
 
-        # Apply filters
         if selected_client != 'All':
             filtered_df_exp = filtered_df_exp[filtered_df_exp['expense_person'] == selected_client]
         if selected_category != 'All':
@@ -645,7 +628,6 @@ def render_client_expense_summary_tab(df_people):
                 filtered_df_exp['original_transaction_ref_num'].str.contains(ref_num_search, case=False, na=False)
             ]
 
-        # Date filtering
         filtered_df_exp['expense_date'] = pd.to_datetime(filtered_df_exp['expense_date'])
         filtered_df_exp = filtered_df_exp[
             (filtered_df_exp['expense_date'].dt.date >= start_date_filter) &
@@ -653,7 +635,6 @@ def render_client_expense_summary_tab(df_people):
         ]
         filtered_df_exp = filtered_df_exp.sort_values(by='expense_date', ascending=False)
 
-        # Prepare for display
         filtered_client_expenses_for_display = filtered_df_exp.drop(columns=['expense_uuid'], errors='ignore')
         st.subheader("Client Expenses")
         st.dataframe(filtered_client_expenses_for_display.style.format({
@@ -661,7 +642,6 @@ def render_client_expense_summary_tab(df_people):
             'expense_quantity': '{:, .2f}'
         }))
 
-        # Summary Metrics and charts
         if not filtered_client_expenses_for_display.empty:
             total_expenses = filtered_client_expenses_for_display['expense_amount'].sum()
             st.metric("Total Expenses in View", f"Rs. {total_expenses:,.2f}")
@@ -733,7 +713,6 @@ def render_client_expense_summary_tab(df_people):
                     save_data(df_exp, CLIENT_EXPENSES_FILE)
                     st.success("Client expense deleted successfully!")
                     st.experimental_rerun()
-
     except Exception as e:
         st.error(f"Error loading client expenses summary: {e}")
 
@@ -743,14 +722,11 @@ def render_manage_people_tab(df_people):
     st.header("Manage People")
     st.write("Add or remove people (clients, partners, etc.) involved in transactions.")
 
-    # Display existing people
     if not df_people.empty:
         st.subheader("Existing People")
-        # Ensure 'person_type' is sorted for better grouping
         df_people_display = df_people.sort_values(by=['person_type', 'name']).reset_index(drop=True)
         st.dataframe(df_people_display)
 
-    # Add new person form
     st.subheader("Add New Person")
     with st.form("add_person_form", clear_on_submit=True):
         col1, col2 = st.columns(2)
@@ -766,7 +742,6 @@ def render_manage_people_tab(df_people):
             else:
                 st.error("Person's name cannot be empty.")
 
-    # Remove person form
     if not df_people.empty:
         st.subheader("Remove Person")
         with st.form("remove_person_form"):
@@ -826,7 +801,6 @@ def render_generate_invoice_tab(df_people):
                 df_payments = load_data(CSV_FILE)
                 df_expenses = load_data(CLIENT_EXPENSES_FILE)
 
-                # Filter payments
                 df_payments['date'] = pd.to_datetime(df_payments['date']).dt.date
                 filtered_payments = df_payments[
                     (df_payments['person'] == st.session_state.invoice_person_name) &
@@ -838,7 +812,6 @@ def render_generate_invoice_tab(df_people):
                         filtered_payments['transaction_type'] == st.session_state.invoice_type
                     ]
 
-                # Filter expenses
                 df_expenses['expense_date'] = pd.to_datetime(df_expenses['expense_date']).dt.date
                 filtered_expenses = df_expenses[
                     (df_expenses['expense_person'] == st.session_state.invoice_person_name) &
@@ -846,7 +819,6 @@ def render_generate_invoice_tab(df_people):
                     (df_expenses['expense_date'] <= st.session_state.invoice_end_date)
                 ]
 
-                # Generate and save PDF
                 if not filtered_payments.empty or not filtered_expenses.empty:
                     pdf_output = create_invoice_pdf(
                         st.session_state.invoice_person_name,
@@ -874,7 +846,6 @@ def render_generate_invoice_tab(df_people):
 
 def create_invoice_pdf(client_name, start_date, end_date, payments_df, expenses_df):
     """Creates a PDF invoice and saves it to a temporary file."""
-    # ... (function body)
     class PDF(FPDF):
         def header(self):
             self.set_font('Arial', 'B', 15)
@@ -896,7 +867,6 @@ def create_invoice_pdf(client_name, start_date, end_date, payments_df, expenses_
     pdf.cell(0, 5, f"Period: {start_date} to {end_date}", 0, 1)
     pdf.ln(5)
 
-    # Payments section
     if not payments_df.empty:
         pdf.set_font('Arial', 'B', 12)
         pdf.cell(0, 10, "Transactions", 0, 1)
@@ -918,7 +888,6 @@ def create_invoice_pdf(client_name, start_date, end_date, payments_df, expenses_
             pdf.ln()
         pdf.ln(5)
 
-    # Expenses section
     if not expenses_df.empty:
         pdf.set_font('Arial', 'B', 12)
         pdf.cell(0, 10, "Client Expenses", 0, 1)
@@ -940,10 +909,9 @@ def create_invoice_pdf(client_name, start_date, end_date, payments_df, expenses_
             pdf.ln()
         pdf.ln(5)
 
-    # Calculate and display summary
-    total_received = payments_df[payments_df['transaction_type'] == 'Received']['amount'].sum()
-    total_paid = payments_df[payments_df['transaction_type'] == 'Paid']['amount'].sum()
-    total_expenses = expenses_df['expense_amount'].sum()
+    total_received = payments_df[payments_df['transaction_type'] == 'Received']['amount'].sum() if not payments_df.empty else 0
+    total_paid = payments_df[payments_df['transaction_type'] == 'Paid']['amount'].sum() if not payments_df.empty else 0
+    total_expenses = expenses_df['expense_amount'].sum() if not expenses_df.empty else 0
     net_balance = total_received - total_paid - total_expenses
 
     pdf.set_font('Arial', 'B', 12)
@@ -955,8 +923,122 @@ def create_invoice_pdf(client_name, start_date, end_date, payments_df, expenses_
     pdf.set_font('Arial', 'B', 10)
     pdf.cell(0, 7, f"Net Balance: Rs. {net_balance:,.2f}", 0, 1)
 
-    # Save to a temp file
     temp_file = f"invoice_{client_name}_{uuid.uuid4()}.pdf"
+    pdf.output(temp_file)
+    return temp_file
+
+# --- New Function for Bill Generation ---
+def render_generate_bill_tab(df_people):
+    """Renders the tab to generate a bill for client expenses."""
+    st.header("Generate Expense Bill")
+    st.write("Create a bill for a client based *only* on their tracked expenses within a date range.")
+    try:
+        client_names = df_people[df_people['person_type'] == 'client']['name'].unique().tolist()
+        if not client_names:
+            st.warning("Please add at least one client in the 'Manage People' tab.")
+            return
+
+        with st.form("bill_form"):
+            st.session_state.bill_client_name = st.selectbox("Client Name", options=sorted(client_names))
+            col1, col2 = st.columns(2)
+            with col1:
+                st.session_state.bill_start_date = st.date_input("Start Date", value=datetime.today() - pd.DateOffset(months=1))
+            with col2:
+                st.session_state.bill_end_date = st.date_input("End Date", value=datetime.today())
+            
+            generate_button = st.form_submit_button("Generate Bill")
+
+            if generate_button:
+                df_expenses = load_data(CLIENT_EXPENSES_FILE)
+
+                df_expenses['expense_date'] = pd.to_datetime(df_expenses['expense_date']).dt.date
+                filtered_expenses = df_expenses[
+                    (df_expenses['expense_person'] == st.session_state.bill_client_name) &
+                    (df_expenses['expense_date'] >= st.session_state.bill_start_date) &
+                    (df_expenses['expense_date'] <= st.session_state.bill_end_date)
+                ]
+
+                if not filtered_expenses.empty:
+                    pdf_output = create_expense_bill_pdf(
+                        st.session_state.bill_client_name,
+                        st.session_state.bill_start_date,
+                        st.session_state.bill_end_date,
+                        filtered_expenses
+                    )
+                    st.session_state.generated_bill_pdf_path = pdf_output
+                    st.session_state.show_bill_download_button = True
+                else:
+                    st.warning("No client expenses found for the selected criteria.")
+                    st.session_state.show_bill_download_button = False
+
+        if st.session_state.show_bill_download_button and st.session_state.generated_bill_pdf_path:
+            with open(st.session_state.generated_bill_pdf_path, "rb") as pdf_file:
+                st.download_button(
+                    label="Download Expense Bill PDF",
+                    data=pdf_file,
+                    file_name=os.path.basename(st.session_state.generated_bill_pdf_path),
+                    mime="application/pdf"
+                )
+    except Exception as e:
+        st.error(f"Error generating expense bill: {e}")
+
+def create_expense_bill_pdf(client_name, start_date, end_date, expenses_df):
+    """Creates a PDF bill for client expenses and saves it to a temporary file."""
+    class PDF(FPDF):
+        def header(self):
+            self.set_font('Arial', 'B', 15)
+            self.cell(0, 10, 'Client Expense Bill', 0, 1, 'C')
+            self.ln(10)
+        def footer(self):
+            self.set_y(-15)
+            self.set_font('Arial', 'I', 8)
+            self.cell(0, 10, f'Page {self.page_no()}/{{nb}}', 0, 0, 'C')
+
+    pdf = PDF('P', 'mm', 'A4')
+    pdf.alias_nb_pages()
+    pdf.add_page()
+    pdf.set_auto_page_break(auto=True, margin=15)
+
+    pdf.set_font('Arial', 'B', 12)
+    pdf.cell(0, 10, f"Bill for: {client_name}", 0, 1)
+    pdf.set_font('Arial', '', 10)
+    pdf.cell(0, 5, f"Period: {start_date} to {end_date}", 0, 1)
+    pdf.ln(5)
+
+    if not expenses_df.empty:
+        pdf.set_font('Arial', 'B', 12)
+        pdf.cell(0, 10, "Client Expenses", 0, 1)
+        pdf.set_font('Arial', 'B', 10)
+        pdf.cell(30, 7, 'Date', 1)
+        pdf.cell(30, 7, 'Category', 1)
+        pdf.cell(30, 7, 'Amount', 1)
+        pdf.cell(30, 7, 'Quantity', 1)
+        pdf.cell(60, 7, 'Description', 1)
+        pdf.ln()
+
+        pdf.set_font('Arial', '', 10)
+        for index, row in expenses_df.iterrows():
+            pdf.cell(30, 7, str(row['expense_date']), 1)
+            pdf.cell(30, 7, row['expense_category'], 1)
+            pdf.cell(30, 7, f"Rs. {float(row['expense_amount']):,.2f}", 1)
+            pdf.cell(30, 7, str(row['expense_quantity']), 1)
+            pdf.cell(60, 7, row['expense_description'], 1, align='L')
+            pdf.ln()
+        pdf.ln(5)
+    else:
+        pdf.set_font('Arial', 'I', 10)
+        pdf.cell(0, 10, "No expenses found for this client in the selected period.", 0, 1)
+        pdf.ln(5)
+
+
+    total_expenses = expenses_df['expense_amount'].sum() if not expenses_df.empty else 0
+
+    pdf.set_font('Arial', 'B', 12)
+    pdf.cell(0, 10, "Summary", 0, 1)
+    pdf.set_font('Arial', 'B', 10)
+    pdf.cell(0, 7, f"Total Amount Due: Rs. {total_expenses:,.2f}", 0, 1)
+
+    temp_file = f"bill_{client_name}_{uuid.uuid4()}.pdf"
     pdf.output(temp_file)
     return temp_file
 
@@ -1000,7 +1082,6 @@ def render_per_person_report_tab(df_people):
             start_date = st.session_state.per_person_report_start_date
             end_date = st.session_state.per_person_report_end_date
 
-            # Filter payments for the person and date range
             filtered_payments = df_payments[
                 (df_payments['person'] == person) &
                 (pd.to_datetime(df_payments['date']).dt.date >= start_date) &
@@ -1008,7 +1089,6 @@ def render_per_person_report_tab(df_people):
             ].copy()
             filtered_payments['amount'] = pd.to_numeric(filtered_payments['amount'], errors='coerce').fillna(0.0)
 
-            # Filter client expenses for the person and date range
             filtered_expenses = df_expenses[
                 (df_expenses['expense_person'] == person) &
                 (pd.to_datetime(df_expenses['expense_date']).dt.date >= start_date) &
@@ -1036,7 +1116,6 @@ def render_per_person_report_tab(df_people):
             else:
                 st.info("No client expenses found for this person in the selected date range.")
 
-            # Summary
             if not filtered_payments.empty or not filtered_expenses.empty:
                 st.subheader("Financial Summary")
                 total_received = filtered_payments['amount'].sum() if not filtered_payments.empty else 0
@@ -1048,10 +1127,6 @@ def render_per_person_report_tab(df_people):
 
 def download_zip_archive():
     """Compresses all CSV files into a zip archive and provides a download link."""
-    # ... (function body)
-    import zipfile
-    from io import BytesIO
-
     zip_buffer = BytesIO()
     with zipfile.ZipFile(zip_buffer, 'a', zipfile.ZIP_DEFLATED) as zip_file:
         for file_name in [CSV_FILE, CLIENTS_FILE, CLIENT_EXPENSES_FILE, PEOPLE_FILE]:
@@ -1067,18 +1142,15 @@ def download_zip_archive():
 
 def load_mock_data():
     """Generates and saves mock data for testing purposes."""
-    # ... (function body)
     from faker import Faker
-    fake = Faker('en_PK') # Use Pakistani locale for names/currency
+    fake = Faker('en_PK')
     num_entries = 50
 
-    # Mock People
     people = [fake.name() for _ in range(10)]
     person_types = ['client'] * 5 + ['vendor'] * 3 + ['other'] * 2
     mock_people_df = pd.DataFrame({'name': people, 'person_type': person_types})
     save_data(mock_people_df, PEOPLE_FILE)
 
-    # Mock Payments
     mock_payments = []
     for _ in range(num_entries):
         transaction_type = np.random.choice(['Received', 'Paid'])
@@ -1108,7 +1180,6 @@ def load_mock_data():
     mock_payments_df = pd.DataFrame(mock_payments)
     save_data(mock_payments_df, CSV_FILE)
 
-    # Mock Client Expenses
     client_names = mock_people_df[mock_people_df['person_type'] == 'client']['name'].unique().tolist()
     expense_categories = ['Travel', 'Materials', 'Labor', 'Subcontractor', 'Miscellaneous']
     mock_expenses = []
@@ -1141,4 +1212,3 @@ def load_mock_data():
 
 if __name__ == '__main__':
     create_app()
-```
