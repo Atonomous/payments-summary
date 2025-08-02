@@ -1,48 +1,48 @@
-expense_uuid,original_transaction_ref_num,expense_person,expense_amount,expense_quantity,expense_date,expense_category,expense_status,expense_description,expense_created_by,total_line_amount
-d8dcdd1a-e56e-42bc-a825-a71c9596214c,,Butt Fitness,1600000.0,13.0,2025-07-01,General,completed,Gym Strength,,20800000.0
-14b4392a-03c7-44a5-a277-e38750985e7e,BTC-386836/25,Barkat Trading Corporation,195000.0,1.0,2025-07-08,General,completed,BTC-386836/25,,195000.0
-47d62a59-946a-4b33-8375-28f14c647466,BTC-38742/25,Barkat Trading Corporation,5625000.0,1.0,2025-06-27,General,completed,BTC-38742/25,,5625000.0
-b214f375-08ee-4253-b523-15cb51c12630,BTC-386741/25,Barkat Trading Corporation,487500.0,1.0,2025-06-27,General,completed,BTC-386741/25,,487500.0
-2cf43036-b6c9-4576-a8ed-51bbda94220f,BTC-62548/25,Barkat Trading Corporation,2933000.0,1.0,2025-05-30,General,completed,BTC-62548/25,,2933000.0
-f6952ee2-7893-4a35-9374-5ead88e7878c,BTC-62765/25,Barkat Trading Corporation,3300000.0,1.0,2025-06-11,General,completed,BTC-62765/25,,3300000.0
-76a82911-b9d4-464a-8aef-d3b5ea4911e0,386645/25,Barkat Trading Corporation,421500.0,1.0,2025-06-10,General,completed,386645/25,,421500.0
-d0e049ea-f2ec-4665-88d2-8faa22e305db,BTC-62549/25,Barkat Trading Corporation,19400.0,1.0,2025-05-30,General,completed,BTC-62549/25,,19400.0
-66572442-51f6-4cf5-8f74-9fa0c7a1fc0b,BTC-386740/25,Barkat Trading Corporation,105100.0,1.0,2025-06-21,General,completed,BTC-386740/25,,105100.0
-1a3e45f6-1ccb-4370-8a20-8af235b74e2f,BTC-386718/25,Barkat Trading Corporation,368000.0,1.0,2025-06-21,General,completed,BTC-386718/25,,368000.0
-a86404b0-2913-48e1-9010-b070b3b7f239,BTC-62905/25,Barkat Trading Corporation,1705000.0,1.0,2025-06-20,General,completed,BTC-62905/25,,1705000.0
-19c3818e-a029-4b95-b7a1-2cf13c192664,# 386735/25,Barkat Trading Corporation,1051000.0,1.0,2025-06-19,General,completed,# 386735/25,,1051000.0
-49b88af5-8994-4779-968f-5d5e38607741,#386715/25,Barkat Trading Corporation,325000.0,1.0,2025-06-19,General,completed,#386715/25,,325000.0
-5bc8df19-abc5-4786-b6d7-26e0fe357a5b,BTC-62819/25,Barkat Trading Corporation,134000.0,1.0,2025-06-16,General,completed,BTC-62819/25,,134000.0
-2f8b5eda-f2c0-4214-aede-c9dac458b0e0,BTC-62815/25,Barkat Trading Corporation,5115000.0,1.0,2025-06-16,General,completed,BTC-62815/25,,5115000.0
-39c894c1-cccb-4b4c-bf7f-5d2ba6c846f2,BTC-62804/25,Barkat Trading Corporation,1705000.0,1.0,2025-06-16,General,completed,BTC-62804/25,,1705000.0
-8a6301d5-d57e-47f2-a69c-bbf97c943011,BTC-62791/25,Barkat Trading Corporation,6820000.0,1.0,2025-06-13,General,completed,BTC-62791/25,,6820000.0
-7158b715-6c13-4d94-b6fe-a5b35d96992e,BTC-62788/25,Barkat Trading Corporation,1705000.0,1.0,2025-06-13,General,completed,BTC-62788/25,,1705000.0
-97c87433-5ee7-4a22-8b00-2101c984740a,386622/25,Barkat Trading Corporation,4023927.6,1.0,2025-06-12,General,completed,386622/25,,4023927.6
-ea6a8fb5-cfe2-4b1a-9537-9ea00a54a5f8,386631/25,Barkat Trading Corporation,2088000.0,1.0,2025-05-17,General,completed,386631/25,,2088000.0
-0bd59fea-0de9-403a-9fba-6e2660a9c030,,Ba Naam  Divisonal Sports Officer Sargodha,1000000.0,1.0,2025-05-19,General,completed,Hami HM  580 4 STROKE HEAVY DUTY,,1000000.0
-6c2c43c4-c81c-4f46-a199-56b9ff66f7b0,,Ba Naam  Divisonal Sports Officer Sargodha,2000000.0,1.0,2025-06-22,General,completed,Hami HM  580 4 STROKE HEAVY DUTY,,2000000.0
-03265220-40df-4a3e-9002-f9c4c23210e3,,Ba Naam  Divisonal Sports Officer Sargodha,7332500.0,1.0,2025-06-30,General,completed,Hami HM580 4stroke heavy duty,,7332500.0
-1b234bb7-10a1-44d5-acc5-30237de36c61,,Ba Naam  Divisonal Sports Officer Sargodha,140000.0,1.0,2025-07-23,General,completed,multi purpose,,140000.0
-c59130c0-512f-4957-88da-150c184cf2bd,,Ba Naam  Divisonal Sports Officer Sargodha,35000.0,1.0,2025-07-23,General,completed,Tchno RAV Electric chain saw,,35000.0
-7f63c311-777e-4f13-bbc7-ea79accbf169,,Ba Naam  Divisonal Sports Officer Sargodha,25000.0,1.0,2025-07-23,General,completed,LED for camera CCTV,,25000.0
-d8df028c-6ac4-4c8a-a224-75f606162f51,,,0.0,1.0,,General,completed,,,0.0
-182b234f-e007-41b9-a3fa-c5a90ed44049,,,0.0,1.0,,General,completed,,,0.0
-8959be01-afed-40e5-b9bc-a984e3d897a3,,,0.0,1.0,,General,completed,,,0.0
-3d1edb24-be42-407a-a3ba-d710c0d9aa4c,,,0.0,1.0,,General,completed,,,0.0
-5effe0f5-fd52-40d5-a621-0d98d3ecad7d,,,0.0,1.0,,General,completed,,,0.0
-5d1b44dd-854e-4142-a068-63c29621de35,,,0.0,1.0,,General,completed,,,0.0
-2d8ed6e0-285b-42b7-a244-c6098288ef38,,,0.0,1.0,,General,completed,,,0.0
-ee2cb0b9-7deb-4365-af99-7d107178952e,,,0.0,1.0,,General,completed,,,0.0
-d8602979-6f70-44fa-86d4-868e909c495b,,,0.0,1.0,,General,completed,,,0.0
-c86fd47d-5455-44d2-82b9-3516304a6084,,,0.0,1.0,,General,completed,,,0.0
-1a6d5931-2df7-4657-8670-a93c18cef165,,,0.0,1.0,,General,completed,,,0.0
-774ae30c-aef1-4893-95a8-97494caabffd,,,0.0,1.0,,General,completed,,,0.0
-580d1b99-1f4c-41e1-9969-c38e26e754c8,,,0.0,1.0,,General,completed,,,0.0
-ea964f16-e723-4eec-9842-03c8fc7d5eef,,,0.0,1.0,,General,completed,,,0.0
-85751f82-9a7a-42d7-b1f2-b459f0a86721,,,0.0,1.0,,General,completed,,,0.0
-928cc0d4-9e84-4fbb-a472-f1b5c10d7f28,,,0.0,1.0,,General,completed,,,0.0
-5e00f6a8-3195-41e4-80d3-14a650a63a03,,,0.0,1.0,,General,completed,,,0.0
-63fd6b81-aa7a-4579-92e7-16c8aff35f29,,,0.0,1.0,,General,completed,,,0.0
-b685e60a-d27e-4c4e-95bd-bfbab605c18f,,,0.0,1.0,,General,completed,,,0.0
-ec9c8d0e-3644-45bb-b2d6-0c94b5b14120,,,0.0,1.0,,General,completed,,,0.0
-1e1f3995-7a9d-46e1-b8d2-f4a24b7704ea,,,0.0,1.0,,General,completed,,,0.0
+reference_number,date,person,category,amount,quantity,description,uuid
+,2025-07-01,Butt Fitness,General,1600000.0,13.0,Gym Strength,c804df5e-ff34-4cac-8ad5-0943656a6184
+BTC-386836/25,2025-07-08,Barkat Trading Corporation,General,195000.0,1.0,BTC-386836/25,1cba997c-2f75-4bff-b2c5-8f003f443d69
+BTC-38742/25,2025-06-27,Barkat Trading Corporation,General,5625000.0,1.0,BTC-38742/25,ecf26399-5ef2-42f5-a207-28621710d4de
+BTC-386741/25,2025-06-27,Barkat Trading Corporation,General,487500.0,1.0,BTC-386741/25,4429f2be-fcfd-4722-b284-4948319d8553
+BTC-62548/25,2025-05-30,Barkat Trading Corporation,General,2933000.0,1.0,BTC-62548/25,1872e017-661b-4689-b889-5433926c4650
+BTC-62765/25,2025-06-11,Barkat Trading Corporation,General,3300000.0,1.0,BTC-62765/25,7532342e-d574-417f-ace0-52712f7ffc02
+386645/25,2025-06-10,Barkat Trading Corporation,General,421500.0,1.0,386645/25,e3057a85-25a5-4daa-834e-da248f017ee1
+BTC-62549/25,2025-05-30,Barkat Trading Corporation,General,19400.0,1.0,BTC-62549/25,9992f287-d625-44db-83f4-b0af51a7ebb0
+BTC-386740/25,2025-06-21,Barkat Trading Corporation,General,105100.0,1.0,BTC-386740/25,b80bb867-e20f-4d38-a674-e7a5e555d24d
+BTC-386718/25,2025-06-21,Barkat Trading Corporation,General,368000.0,1.0,BTC-386718/25,59c40d97-81eb-422b-924d-06a338daff00
+BTC-62905/25,2025-06-20,Barkat Trading Corporation,General,1705000.0,1.0,BTC-62905/25,24feb516-c408-4a20-bc10-9468ba8d4d7d
+# 386735/25,2025-06-19,Barkat Trading Corporation,General,1051000.0,1.0,# 386735/25,0cac302f-291e-43a9-b9fb-8dfc0095f2a5
+#386715/25,2025-06-19,Barkat Trading Corporation,General,325000.0,1.0,#386715/25,5af0864f-59f5-43d2-ad43-60922ae8cee3
+BTC-62819/25,2025-06-16,Barkat Trading Corporation,General,134000.0,1.0,BTC-62819/25,4f86bc3d-d9fd-4d2e-988a-75ebcb2291a3
+BTC-62815/25,2025-06-16,Barkat Trading Corporation,General,5115000.0,1.0,BTC-62815/25,1515f9be-819d-4cdd-a0f4-8f665c746e84
+BTC-62804/25,2025-06-16,Barkat Trading Corporation,General,1705000.0,1.0,BTC-62804/25,bb705bc1-0f15-4f1b-9f6c-15da9fdb796f
+BTC-62791/25,2025-06-13,Barkat Trading Corporation,General,6820000.0,1.0,BTC-62791/25,d82baa35-a5be-40ed-9e03-2e5440542b63
+BTC-62788/25,2025-06-13,Barkat Trading Corporation,General,1705000.0,1.0,BTC-62788/25,119871f6-4baf-4734-8635-386d1908bd6f
+386622/25,2025-06-12,Barkat Trading Corporation,General,4023927.6,1.0,386622/25,4d535219-7de1-4a01-b60f-67c73b90969c
+386631/25,2025-05-17,Barkat Trading Corporation,General,2088000.0,1.0,386631/25,6a7b8e85-2330-4991-b238-d4b21b908657
+,2025-05-19,Ba Naam  Divisonal Sports Officer Sargodha,General,1000000.0,1.0,Hami HM  580 4 STROKE HEAVY DUTY,7025da4b-bf4a-4cc9-bb06-c4bb0b62c447
+,2025-06-22,Ba Naam  Divisonal Sports Officer Sargodha,General,2000000.0,1.0,Hami HM  580 4 STROKE HEAVY DUTY,0191ce76-f9c4-4d82-acfb-dbf09e72964e
+,2025-06-30,Ba Naam  Divisonal Sports Officer Sargodha,General,7332500.0,1.0,Hami HM580 4stroke heavy duty,7c1b792f-6aea-4deb-83c4-c355652cc50c
+,2025-07-23,Ba Naam  Divisonal Sports Officer Sargodha,General,140000.0,1.0,multi purpose,397f1b24-f2ea-41c4-9213-38d482d67a6f
+,2025-07-23,Ba Naam  Divisonal Sports Officer Sargodha,General,35000.0,1.0,Tchno RAV Electric chain saw,58847327-9166-4c60-9bb1-ed3cd14451ca
+,2025-07-23,Ba Naam  Divisonal Sports Officer Sargodha,General,25000.0,1.0,LED for camera CCTV,c8594004-6fb2-488c-b6c7-f45e8450e3ea
+,,,General,0.0,1.0,,ea64577b-aca4-4340-baf8-22a7913e3cf4
+,,,General,0.0,1.0,,a9020a7e-39f6-444a-a504-ffd6f0b40cae
+,,,General,0.0,1.0,,1e6e618c-8e76-471b-ae6f-04ee777e0648
+,,,General,0.0,1.0,,b216807d-0e6c-4c51-8832-186b14d78833
+,,,General,0.0,1.0,,98682d4d-62f8-4c36-913a-28fcd8f3fd6d
+,,,General,0.0,1.0,,0e9d0e5f-d30a-4e82-818d-67e8059e39c7
+,,,General,0.0,1.0,,4209e159-6d43-4e85-ae2b-6135cd8eee65
+,,,General,0.0,1.0,,78c40f58-622c-4c0c-8d8d-023b0a1b5ac8
+,,,General,0.0,1.0,,757e7e6d-8995-4dac-80e9-624949d64c88
+,,,General,0.0,1.0,,f323a583-df15-48a8-8947-c2c9760633c7
+,,,General,0.0,1.0,,c0a38bb2-6343-4bdf-aa89-bf0e3db08119
+,,,General,0.0,1.0,,1913d47d-debc-4e9f-ac62-9931bf106bb0
+,,,General,0.0,1.0,,88bca9e3-73c2-4bc7-a4f9-94c6f95c1cdc
+,,,General,0.0,1.0,,f9f43e5b-8041-4bd1-a589-cee03574e75c
+,,,General,0.0,1.0,,d50e17c3-7422-43f7-acf1-81818fe3815f
+,,,General,0.0,1.0,,2445fba1-9d4b-4779-8974-20c7c2588bd5
+,,,General,0.0,1.0,,bf4a4792-36e3-4a88-993a-c23311547906
+,,,General,0.0,1.0,,91cf16b2-1592-4a53-92b0-f389266305c1
+,,,General,0.0,1.0,,0d4d8bf9-b02e-4d30-88a0-dc3b47872da3
+,,,General,0.0,1.0,,aaf976fb-bd21-490a-9bce-61abe50cb39a
+,,,General,0.0,1.0,,f611ccf4-598b-417b-972a-dfcd3720611e
