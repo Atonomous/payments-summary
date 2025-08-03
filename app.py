@@ -6,16 +6,22 @@ from git import Repo, GitCommandError
 import numpy as np
 import uuid
 from fpdf import FPDF
-import json # Used for serializing to JSON for the report
+import json
+import re
+import shutil
 
 # --- Constants ---
-# Moved file names to constants for easier management
 CSV_FILE = 'payments.csv'
 PEOPLE_FILE = 'people.csv'
 CLIENT_EXPENSES_FILE = 'client_expenses.csv'
-GIT_REPO_PATH = '.'  # Current directory
+GIT_REPO_PATH = '.'
 GIT_REMOTE_NAME = 'origin'
 GIT_BRANCH_NAME = 'main'
+GITHUB_REPO_URL = "https://github.com/Autonomous/payments-summary"
+REPORTS_DIR = 'reports'
+DOCS_DIR = 'docs'
+BACKUP_DIR = 'backups'
+HTML_SUMMARY_FILE = os.path.join(DOCS_DIR, 'index.html')
 
 # --- State Management ---
 def init_state():
@@ -24,662 +30,750 @@ def init_state():
         'selected_transaction_type', 'payment_method', 'editing_row_idx', 'selected_person', 'reset_add_form',
         'add_amount', 'add_date', 'add_reference_number', 'add_cheque_status', 'add_status', 'add_description',
         'temp_edit_data', 'invoice_person_name', 'invoice_type', 'invoice_start_date', 'invoice_end_date',
-        'generated_invoice_pdf_path', 'show_download_button',
-        'view_person_filter', 'view_reference_number_search', 'view_person_filter_client_expense',
+        'generated_invoice_pdf_path', 'show_download_button', 'view_person_filter', 'view_reference_number_search',
         'selected_client_for_expense', 'add_client_expense_amount', 'add_client_expense_date',
         'add_client_expense_category', 'add_client_expense_description', 'reset_client_expense_form',
-        'add_client_expense_quantity',
-        'client_expense_ref_num_search',
-        'editing_client_expense_idx',
-        'temp_edit_client_expense_data',
-        'client_expense_filter_start_date',
-        'client_expense_filter_end_date',
-        'payments_df',
-        'people_df',
-        'client_expenses_df',
-        'html_summary_content',
-        'temp_edit_data_people',
-        'editing_people_idx'
+        'add_client_expense_quantity', 'client_expense_ref_num_search', 'editing_client_expense_idx',
+        'temp_edit_client_expense_data', 'selected_payment_uuid', 'selected_expense_uuid', 'payment_ref_num_search',
+        'generated_pdf_data', 'report_type', 'generated_pdf_filename', 'use_date_range',
+        'show_payment_delete_confirm', 'payment_to_delete_uuid', 'show_expense_delete_confirm', 'expense_to_delete_uuid'
     ]
+    
     for key in keys:
         if key not in st.session_state:
             st.session_state[key] = None
+
     if st.session_state.reset_add_form is None:
-        st.session_state.reset_add_form = True
+        st.session_state.reset_add_form = False
     if st.session_state.reset_client_expense_form is None:
-        st.session_state.reset_client_expense_form = True
+        st.session_state.reset_client_expense_form = False
     
-    # Ensure date inputs are initialized to datetime objects
-    if 'add_date' not in st.session_state or st.session_state.add_date is None:
-        st.session_state.add_date = datetime.now().date()
-    if 'add_client_expense_date' not in st.session_state or st.session_state.add_client_expense_date is None:
-        st.session_state.add_client_expense_date = datetime.now().date()
-    if 'invoice_start_date' not in st.session_state or st.session_state.invoice_start_date is None:
-        st.session_state.invoice_start_date = datetime.now().date()
-    if 'invoice_end_date' not in st.session_state or st.session_state.invoice_end_date is None:
-        st.session_state.invoice_end_date = datetime.now().date()
+    today = datetime.now().date()
+    if 'view_payments_start_date' not in st.session_state:
+        st.session_state.view_payments_start_date = today
+    if 'view_payments_end_date' not in st.session_state:
+        st.session_state.view_payments_end_date = today
+    if 'view_expenses_start_date' not in st.session_state:
+        st.session_state.view_expenses_start_date = today
+    if 'view_expenses_end_date' not in st.session_state:
+        st.session_state.view_expenses_end_date = today
+    if 'invoice_start_date' not in st.session_state:
+        st.session_state.invoice_start_date = today
+    if 'invoice_end_date' not in st.session_state:
+        st.session_state.invoice_end_date = today
 
+# --- File & Git Management Functions ---
+def sanitize_filename(filename):
+    """Sanitizes a string to be a valid filename."""
+    return re.sub(r'[\\/*?:"<>|]', '', filename)
 
-# --- Helper Functions ---
-def git_push(commit_message):
-    """Commits and pushes changes to the remote git repository."""
+def push_to_git():
+    """Pushes the current state of the repo to the remote origin."""
     try:
-        if not os.path.isdir(os.path.join(GIT_REPO_PATH, '.git')):
-            st.error("Git repository not found. Please initialize a git repository in the app's directory.")
-            return False
+        if not os.path.exists(os.path.join(GIT_REPO_PATH, '.git')):
+            st.error("Git repository not found. Please initialize a git repo.")
+            return
 
         repo = Repo(GIT_REPO_PATH)
-        repo.git.add('.')
-        repo.index.commit(commit_message)
-        origin = repo.remote(name=GIT_REMOTE_NAME)
-        origin.push(GIT_BRANCH_NAME)
-        st.success("Changes committed and pushed to git successfully!")
-        return True
-    except GitCommandError as e:
-        st.error(f"Git command failed: {e}")
-        return False
-    except Exception as e:
-        st.error(f"An unexpected error occurred during git push: {e}")
-        return False
-
-def load_data():
-    """
-    Loads all data from CSV files and stores them in session state.
-    This prevents redundant file reads and makes the app more efficient.
-    Handles FileNotFoundError and EmptyDataError gracefully by creating
-    new, empty DataFrames with the correct columns.
-    """
-    # Define a consistent schema for all dataframes
-    payments_cols = ['uuid', 'person', 'type', 'amount', 'date', 'description', 'reference_number', 'cheque_status', 'status', 'payment_method']
-    people_cols = ['name', 'contact', 'type']
-    client_expenses_cols = ['uuid', 'person', 'date', 'description', 'category', 'amount', 'quantity', 'reference_number']
-
-    # Load payments data
-    try:
-        df = pd.read_csv(CSV_FILE, dtype={'reference_number': str}, keep_default_na=False)
-        # Drop the original 'status' column and rename 'transaction_status' to 'status'
-        if 'status' in df.columns and 'transaction_status' in df.columns:
-            df = df.drop(columns=['status'])
-            df = df.rename(columns={'transaction_status': 'status'})
-        # Standardize other column names
-        df = df.rename(columns={
-            'date': 'date',
-            'person': 'person',
-            'amount': 'amount',
-            'type': 'type',
-            'description': 'description',
-            'payment_method': 'payment_method',
-            'reference_number': 'reference_number',
-            'cheque_status': 'cheque_status'
-        })
-        # Add a UUID column if it doesn't exist
-        if 'uuid' not in df.columns:
-            df['uuid'] = [str(uuid.uuid4()) for _ in range(len(df))]
-        st.session_state.payments_df = df
-    except (FileNotFoundError, pd.errors.EmptyDataError):
-        st.session_state.payments_df = pd.DataFrame(columns=payments_cols)
-    st.session_state.payments_df.to_csv(CSV_FILE, index=False)
-
-
-    # Load people data
-    try:
-        st.session_state.people_df = pd.read_csv(PEOPLE_FILE, keep_default_na=False)
-    except (FileNotFoundError, pd.errors.EmptyDataError):
-        st.session_state.people_df = pd.DataFrame(columns=people_cols)
-    st.session_state.people_df.to_csv(PEOPLE_FILE, index=False)
-
-    # Load client expenses data
-    try:
-        df = pd.read_csv(CLIENT_EXPENSES_FILE, dtype={'original_transaction_ref_num': str}, keep_default_na=False)
-        # Standardize column names from the provided CSV
-        df = df.rename(columns={
-            'expense_date': 'date',
-            'expense_person': 'person',
-            'expense_category': 'category',
-            'expense_amount': 'amount',
-            'expense_quantity': 'quantity',
-            'expense_description': 'description',
-            'original_transaction_ref_num': 'reference_number',
-        })
-        # Add a UUID column if it doesn't exist
-        if 'uuid' not in df.columns:
-            df['uuid'] = [str(uuid.uuid4()) for _ in range(len(df))]
-        st.session_state.client_expenses_df = df
-    except (FileNotFoundError, pd.errors.EmptyDataError):
-        st.session_state.client_expenses_df = pd.DataFrame(columns=client_expenses_cols)
-    st.session_state.client_expenses_df.to_csv(CLIENT_EXPENSES_FILE, index=False)
-
-
-def update_people_list(person_name):
-    """
-    Checks if a person exists in the people list and adds them if not.
-    """
-    if person_name not in st.session_state.people_df['name'].values:
-        new_person = pd.DataFrame([{'name': person_name, 'contact': '', 'type': 'Client'}])
-        st.session_state.people_df = pd.concat([st.session_state.people_df, new_person], ignore_index=True)
-        st.session_state.people_df.to_csv(PEOPLE_FILE, index=False)
-
-class PDF(FPDF):
-    def header(self):
-        self.set_font('Arial', 'B', 15)
-        self.cell(0, 10, 'Invoice', 0, 1, 'C')
-        self.ln(10)
-
-    def footer(self):
-        self.set_y(-15)
-        self.set_font('Arial', 'I', 8)
-        self.cell(0, 10, f'Page {self.page_no()}/{{nb}}', 0, 0, 'C')
-
-    def chapter_title(self, title):
-        self.set_font('Arial', 'B', 12)
-        self.cell(0, 10, title, 0, 1, 'L')
-        self.ln(4)
-
-    def chapter_body(self, body):
-        self.set_font('Arial', '', 12)
-        self.multi_cell(0, 10, body)
-        self.ln()
-
-    def add_table(self, data, headers):
-        self.set_font('Arial', 'B', 10)
-        col_widths = [self.w / (len(headers) + 1)] * len(headers)
-        for i, header in enumerate(headers):
-            self.cell(col_widths[i], 7, str(header), 1, 0, 'C')
-        self.ln()
-        self.set_font('Arial', '', 10)
-        for row in data:
-            for i, item in enumerate(row):
-                self.cell(col_widths[i], 7, str(item), 1, 0, 'C')
-            self.ln()
-
-def generate_invoice_pdf(person, invoice_type, start_date, end_date):
-    """Generates a PDF invoice for a given person and date range."""
-    payments_df = st.session_state.payments_df
-    client_expenses_df = st.session_state.client_expenses_df
-
-    if invoice_type == 'Payments':
-        data = payments_df[
-            (payments_df['person'] == person) &
-            (pd.to_datetime(payments_df['date']) >= pd.to_datetime(start_date)) &
-            (pd.to_datetime(payments_df['date']) <= pd.to_datetime(end_date))
-        ]
-        total_amount = data['amount'].sum()
-        headers = ['Date', 'Type', 'Amount', 'Description']
-        table_data = data[['date', 'type', 'amount', 'description']].values.tolist()
-    else:  # Client Expenses
-        data = client_expenses_df[
-            (client_expenses_df['person'] == person) &
-            (pd.to_datetime(client_expenses_df['date']) >= pd.to_datetime(start_date)) &
-            (pd.to_datetime(client_expenses_df['date']) <= pd.to_datetime(end_date))
-        ]
-        total_amount = data['amount'].sum()
-        headers = ['Date', 'Category', 'Description', 'Amount', 'Quantity']
-        table_data = data[['date', 'category', 'description', 'amount', 'quantity']].values.tolist()
-
-    pdf = PDF()
-    pdf.set_auto_page_break(auto=True, margin=15)
-    pdf.add_page()
-    pdf.chapter_title(f'Invoice for {person}')
-    pdf.chapter_body(f"Date Range: {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}")
-    pdf.chapter_body(f"Total {invoice_type}: Rs. {total_amount:,.2f}")
-    if not data.empty:
-      pdf.add_table(table_data, headers)
-    else:
-      pdf.chapter_body("No data found for this period.")
-
-    invoice_filename = f"invoice_{person}_{datetime.now().strftime('%Y%m%d%H%M%S')}.pdf"
-    pdf_output_path = os.path.join(".", invoice_filename)
-    pdf.output(pdf_output_path)
-    return pdf_output_path
-
-# --- Main App ---
-st.set_page_config(layout="wide")
-st.title("Payments & Client Expenses Management System")
-
-# Initialize session state first thing
-init_state()
-
-# Load data into session state at the beginning of every run
-# This is the key fix to prevent NoneType errors.
-load_data()
-
-# Use the dataframes from session state throughout the app
-payments_df = st.session_state.payments_df
-people_df = st.session_state.people_df
-client_expenses_df = st.session_state.client_expenses_df
-
-# --- Sidebar ---
-st.sidebar.header("Balances Summary")
-
-try:
-    if not payments_df.empty:
-        paid = payments_df[payments_df['type'] == 'Paid']['amount'].sum()
-        received = payments_df[payments_df['type'] == 'Received']['amount'].sum()
-        net_balance = received - paid
-
-        st.sidebar.metric("Total Received", f"Rs. {received:,.2f}")
-        st.sidebar.metric("Total Paid", f"Rs. {paid:,.2f}")
-        st.sidebar.metric("Net Balance", f"Rs. {net_balance:,.2f}")
-    else:
-        st.sidebar.info("No transactions yet.")
-except KeyError as e:
-    st.sidebar.error(f"Dataframe is missing a column: {str(e)}. Please check the CSV files for correct headers.")
-except Exception as e:
-    st.sidebar.error(f"Error loading balances: {str(e)}")
-
-# --- Tabs ---
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["Add Transaction", "View Payments", "Add Client Expense", "View Client Expenses", "Manage People", "Reports & Invoice"])
-
-# --- Tab 1: Add Transaction ---
-with tab1:
-    st.header("Add New Transaction")
-    if st.session_state.reset_add_form:
-        st.session_state.add_amount = None
-        st.session_state.add_date = datetime.now().date()
-        st.session_state.add_reference_number = ''
-        st.session_state.add_cheque_status = 'Pending'
-        st.session_state.add_description = ''
-        st.session_state.selected_transaction_type = 'Paid'
-        st.session_state.payment_method = 'Cash'
-        st.session_state.selected_person = 'Select a person'
-
-    with st.form("add_transaction_form", clear_on_submit=True):
-        st.session_state.selected_transaction_type = st.radio(
-            "Transaction Type",
-            ['Paid', 'Received'],
-            horizontal=True,
-            index=0 if st.session_state.selected_transaction_type == 'Paid' else 1
-        )
+        repo.git.add(A=True)
+        repo.index.commit(f"Automated commit on {datetime.now()}")
+        st.session_state.commit_hash = repo.head.commit.hexsha
         
-        people_options = ['Select a person'] + people_df['name'].tolist()
-        st.session_state.selected_person = st.selectbox(
-            "Person/Client",
-            options=people_options,
-            index=people_options.index(st.session_state.selected_person) if st.session_state.selected_person in people_options else 0
-        )
-        col1, col2 = st.columns(2)
-        with col1:
-            st.session_state.add_amount = st.number_input("Amount", min_value=0.01, format="%.2f", key="add_amount_input", value=st.session_state.add_amount)
-        with col2:
-            st.session_state.add_date = st.date_input("Date", key="add_date_input", value=st.session_state.add_date)
-        
-        st.session_state.payment_method = st.radio(
-            "Payment Method",
-            ['Cash', 'Cheque'],
-            horizontal=True,
-            index=0 if st.session_state.payment_method == 'Cash' else 1
-        )
-        if st.session_state.payment_method == 'Cheque':
-            st.session_state.add_reference_number = st.text_input("Cheque Number", key="add_ref_num_input", value=st.session_state.add_reference_number)
-            st.session_state.add_cheque_status = st.selectbox(
-                "Cheque Status",
-                ['Pending', 'Cleared', 'Bounced'],
-                index=['Pending', 'Cleared', 'Bounced'].index(st.session_state.add_cheque_status) if st.session_state.add_cheque_status in ['Pending', 'Cleared', 'Bounced'] else 0
-            )
+        origin = repo.remote(GIT_REMOTE_NAME)
+        if GIT_BRANCH_NAME not in [ref.name.split('/')[-1] for ref in origin.refs]:
+            repo.git.push('--set-upstream', GIT_REMOTE_NAME, GIT_BRANCH_NAME)
         else:
-            st.session_state.add_reference_number = st.text_input("Reference Number (Optional)", key="add_ref_num_input_cash", value=st.session_state.add_reference_number)
+            repo.git.push(GIT_REMOTE_NAME, GIT_BRANCH_NAME)
+        
+        st.success("Successfully pushed changes to Git.")
+    except GitCommandError as e:
+        st.error(f"Git command error: {e.stderr}. Check your Git configuration.")
+    except Exception as e:
+        st.error(f"An error occurred while pushing to Git: {e}")
 
-        st.session_state.add_description = st.text_area("Description", key="add_description_input", value=st.session_state.add_description)
+def load_data(file_path, columns):
+    """Loads a CSV file into a pandas DataFrame, creating it if it doesn't exist."""
+    try:
+        if not os.path.exists(file_path):
+            df = pd.DataFrame(columns=columns)
+            df.to_csv(file_path, index=False)
+            return df
+        # Added dtype for UUID to ensure it's always a string
+        return pd.read_csv(file_path, dtype={'reference_number': str, 'uuid': str}, keep_default_na=False)
+    except Exception as e:
+        st.error(f"Error loading {file_path}: {e}")
+        return pd.DataFrame(columns=columns)
 
-        submitted = st.form_submit_button("Add Transaction")
-        if submitted:
-            if st.session_state.selected_person == 'Select a person':
-                st.error("Please select a person/client.")
-            elif st.session_state.add_amount is None or st.session_state.add_amount <= 0:
-                st.error("Please enter a valid amount.")
-            else:
-                if st.session_state.selected_person not in people_df['name'].values:
-                    update_people_list(st.session_state.selected_person)
-                    people_df = st.session_state.people_df
+def load_people():
+    """Loads people data from CSV."""
+    try:
+        if not os.path.exists(PEOPLE_FILE):
+            return pd.DataFrame(columns=['name', 'type'])
+        df = pd.read_csv(PEOPLE_FILE)
+        if 'category' in df.columns:
+            df.rename(columns={'category': 'type'}, inplace=True)
+        return df
+    except Exception as e:
+        st.error(f"Error loading {PEOPLE_FILE}: {e}")
+        return pd.DataFrame(columns=['name', 'type'])
 
-                new_row = {
-                    'uuid': str(uuid.uuid4()),
-                    'person': st.session_state.selected_person,
-                    'type': st.session_state.selected_transaction_type,
-                    'amount': st.session_state.add_amount,
-                    'date': st.session_state.add_date.strftime('%Y-%m-%d'),
-                    'description': st.session_state.add_description,
-                    'reference_number': st.session_state.add_reference_number,
-                    'cheque_status': st.session_state.add_cheque_status if st.session_state.payment_method == 'Cheque' else '',
-                    'status': 'Completed',
-                    'payment_method': st.session_state.payment_method
-                }
-                
-                st.session_state.payments_df = pd.concat([st.session_state.payments_df, pd.DataFrame([new_row])], ignore_index=True)
-                st.session_state.payments_df.to_csv(CSV_FILE, index=False)
-                st.success(f"Successfully added {st.session_state.selected_transaction_type} transaction!")
-                st.session_state.reset_add_form = True
-                st.rerun()
-
-# --- Tab 2: View Payments ---
-with tab2:
-    st.header("View and Edit Payments")
-    st.info("Remember to click 'Save Payments' to save any changes you make in the table.")
+def backup_file(file_path):
+    """Creates a timestamped backup of the given file."""
+    if not os.path.exists(BACKUP_DIR):
+        os.makedirs(BACKUP_DIR)
     
-    filter_col1, filter_col2 = st.columns(2)
-    with filter_col1:
-        filter_people_options = ['All'] + st.session_state.people_df['name'].tolist()
-        st.session_state.view_person_filter = st.selectbox(
-            "Filter by Person",
-            options=filter_people_options,
-            index=filter_people_options.index(st.session_state.view_person_filter) if st.session_state.view_person_filter in filter_people_options else 0,
-            key='view_person_filter_payments'
-        )
-    with filter_col2:
-        st.session_state.view_reference_number_search = st.text_input(
-            "Search by Reference Number",
-            value=st.session_state.view_reference_number_search,
-            key='ref_num_search_payments'
-        )
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    file_name = os.path.basename(file_path)
+    backup_path = os.path.join(BACKUP_DIR, f"{timestamp}_{file_name}.bak")
+    
+    try:
+        shutil.copy(file_path, backup_path)
+        st.info(f"Backup created at: {backup_path}")
+    except Exception as e:
+        st.warning(f"Could not create backup: {e}")
 
-    filtered_payments_df = payments_df.copy()
-    if st.session_state.view_person_filter != 'All':
-        filtered_payments_df = filtered_payments_df[filtered_payments_df['person'] == st.session_state.view_person_filter]
-    if st.session_state.view_reference_number_search:
-        filtered_payments_df = filtered_payments_df[
-            filtered_payments_df['reference_number'].str.contains(st.session_state.view_reference_number_search, case=False, na=False)
+
+# --- Report Generation Functions ---
+def generate_report_pdf(person_name, report_type, start_date, end_date, payments_df, client_expenses_df, use_date_range):
+    """Generates a professional-looking PDF report."""
+    
+    payments_df['date'] = pd.to_datetime(payments_df['date'])
+    client_expenses_df['date'] = pd.to_datetime(client_expenses_df['date'])
+    
+    person_payments = payments_df[(payments_df['person'] == person_name)].copy()
+    person_expenses = client_expenses_df[(client_expenses_df['person'] == person_name)].copy()
+    
+    if use_date_range:
+        person_payments = person_payments[
+            (person_payments['date'].dt.date >= start_date) &
+            (person_payments['date'].dt.date <= end_date)
+        ]
+        person_expenses = person_expenses[
+            (person_expenses['date'].dt.date >= start_date) &
+            (person_expenses['date'].dt.date <= end_date)
         ]
     
-    if not filtered_payments_df.empty:
-      filtered_payments_df['date'] = pd.to_datetime(filtered_payments_df['date'])
-      filtered_payments_df = filtered_payments_df.sort_values(by='date', ascending=False)
-      filtered_payments_df['date'] = filtered_payments_df['date'].dt.strftime('%Y-%m-%d')
-    
-    st.subheader("Payment Transactions")
-    edited_df = st.data_editor(
-        filtered_payments_df,
-        key='payments_data_editor',
-        use_container_width=True,
-        num_rows="dynamic",
-        column_order=('person', 'type', 'amount', 'date', 'description', 'reference_number', 'payment_method', 'cheque_status', 'status')
-    )
-    
-    if st.button("Save Payments", key="save_payments_button"):
-        st.session_state.payments_df = edited_df
-        st.session_state.payments_df.to_csv(CSV_FILE, index=False)
-        git_push("Updated payments data.")
-        st.success("Payments updated and saved successfully!")
-        st.rerun()
+    pdf = FPDF()
+    pdf.add_page()
 
-# --- Tab 3: Add Client Expense ---
-with tab3:
-    st.header("Add New Client Expense")
-    if st.session_state.reset_client_expense_form:
-        st.session_state.add_client_expense_amount = None
-        st.session_state.add_client_expense_date = datetime.now().date()
-        st.session_state.add_client_expense_description = ''
-        st.session_state.add_client_expense_category = 'Material'
-        st.session_state.add_client_expense_quantity = None
-        st.session_state.selected_client_for_expense = 'Select a client'
-        st.session_state.client_expense_ref_num_search = ''
+    # --- Header ---
+    pdf.set_font("Arial", 'B', 16)
+    pdf.set_text_color(51, 102, 153) # Dark blue
+    pdf.cell(0, 10, "Financial Report", ln=True, align='C')
+    pdf.ln(5)
+    pdf.set_font("Arial", 'B', 12)
+    pdf.set_text_color(0, 0, 0)
+    
+    title_map = {
+        'Bill': 'Bill (Client Expenses)',
+        'Invoice': 'Invoice (Account Statement)',
+        'Inquiry': 'Inquiry (My Payments to Client)'
+    }
+    
+    pdf.cell(0, 10, txt=f"Report Type: {title_map[report_type]}", ln=True, align='L')
+    pdf.cell(0, 10, txt=f"Client: {person_name}", ln=True, align='L')
+    if use_date_range:
+        pdf.cell(0, 10, txt=f"Period: {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}", ln=True, align='L')
+    pdf.ln(10)
 
-    with st.form("add_client_expense_form", clear_on_submit=True):
-        client_options = ['Select a client'] + people_df['name'].tolist()
-        st.session_state.selected_client_for_expense = st.selectbox(
-            "Client",
-            options=client_options,
-            index=client_options.index(st.session_state.selected_client_for_expense) if st.session_state.selected_client_for_expense in client_options else 0
-        )
+    # --- Payments Section ---
+    if report_type in ['Invoice', 'Inquiry']:
+        pdf.set_font("Arial", 'B', 14)
+        pdf.set_text_color(51, 102, 153)
+        pdf.cell(0, 10, "Payments (Debits: I Paid to Client)", ln=True, align='L')
+        pdf.set_text_color(0, 0, 0)
+        pdf.set_font("Arial", 'B', 10)
+        pdf.cell(30, 7, "Date", 1)
+        pdf.cell(50, 7, "Reference No.", 1)
+        pdf.cell(80, 7, "Description", 1)
+        pdf.cell(30, 7, "Amount (Rs.)", 1, ln=True, align='R')
+        
+        pdf.set_font("Arial", '', 10)
+        if not person_payments.empty:
+            for _, row in person_payments.iterrows():
+                pdf.cell(30, 7, row['date'].strftime('%Y-%m-%d'), 1)
+                pdf.cell(50, 7, row['reference_number'], 1)
+                pdf.cell(80, 7, row['description'], 1)
+                pdf.cell(30, 7, f"{row['amount']:,.2f}", 1, ln=True, align='R')
+        else:
+            pdf.cell(0, 7, "No payments found for this period.", 1, ln=True)
+
+        total_payments = person_payments['amount'].sum() if not person_payments.empty else 0
+        pdf.ln(2)
+        pdf.set_font("Arial", 'B', 12)
+        pdf.cell(0, 10, f"Total Payments: Rs. {total_payments:,.2f}", ln=True, align='R')
+        pdf.ln(5)
+
+    # --- Client Expenses Section ---
+    if report_type in ['Invoice', 'Bill']:
+        pdf.set_font("Arial", 'B', 14)
+        pdf.set_text_color(51, 102, 153)
+        pdf.cell(0, 10, "Client Expenses (Credits: Client Spent)", ln=True, align='L')
+        pdf.set_text_color(0, 0, 0)
+        pdf.set_font("Arial", 'B', 10)
+        pdf.cell(30, 7, "Date", 1)
+        pdf.cell(50, 7, "Reference No.", 1)
+        pdf.cell(80, 7, "Description", 1)
+        pdf.cell(30, 7, "Amount (Rs.)", 1, ln=True, align='R')
+        
+        pdf.set_font("Arial", '', 10)
+        if not person_expenses.empty:
+            for _, row in person_expenses.iterrows():
+                pdf.cell(30, 7, row['date'].strftime('%Y-%m-%d'), 1)
+                pdf.cell(50, 7, row['reference_number'], 1)
+                pdf.cell(80, 7, row['description'], 1)
+                pdf.cell(30, 7, f"{row['amount']:,.2f}", 1, ln=True, align='R')
+        else:
+            pdf.cell(0, 7, "No client expenses found for this period.", 1, ln=True)
+
+        total_expenses = person_expenses['amount'].sum() if not person_expenses.empty else 0
+        pdf.ln(2)
+        pdf.set_font("Arial", 'B', 12)
+        pdf.cell(0, 10, f"Total Client Expenses: Rs. {total_expenses:,.2f}", ln=True, align='R')
+        pdf.ln(5)
+
+    # --- Summary for Invoice ---
+    if report_type == 'Invoice':
+        pdf.ln(10)
+        net_balance = total_payments - total_expenses
+        pdf.set_font("Arial", 'B', 14)
+        pdf.set_text_color(51, 102, 153)
+        pdf.cell(0, 10, f"Net Balance: Rs. {net_balance:,.2f}", ln=True, align='L')
+    
+    return pdf.output(dest='S')
+
+def generate_html_summary(payments_df, client_expenses_df):
+    """Generates an HTML summary file for the docs folder."""
+    try:
+        payments_df['amount'] = pd.to_numeric(payments_df['amount'], errors='coerce').fillna(0)
+        client_expenses_df['amount'] = pd.to_numeric(client_expenses_df['amount'], errors='coerce').fillna(0)
+
+        total_received = payments_df[payments_df['type'] == 'i_received']['amount'].sum()
+        total_paid = payments_df[payments_df['type'] == 'i_paid']['amount'].sum()
+        total_client_expenses = client_expenses_df['amount'].sum()
+        net_balance = total_received - (total_paid + total_client_expenses)
+
+        html_content = f"""
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Financial Summary</title>
+            <style>
+                body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; margin: 20px; background-color: #f4f4f9; color: #333; }}
+                .container {{ max-width: 800px; margin: auto; padding: 20px; background: #fff; border-radius: 8px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); }}
+                h1 {{ color: #004080; border-bottom: 2px solid #007bff; padding-bottom: 10px; }}
+                .metric {{ margin-top: 15px; padding: 15px; border-left: 5px solid #007bff; background: #e9f5ff; border-radius: 4px; }}
+                .metric-title {{ font-weight: bold; color: #555; }}
+                .metric-value {{ font-size: 1.5em; font-weight: normal; color: #000; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h1>Financial Summary</h1>
+                <div class="metric">
+                    <div class="metric-title">Total Received</div>
+                    <div class="metric-value">Rs. {total_received:,.2f}</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-title">Total Paid (to clients)</div>
+                    <div class="metric-value">Rs. {total_paid:,.2f}</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-title">Total Client Expenses</div>
+                    <div class="metric-value">Rs. {total_client_expenses:,.2f}</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-title">Net Balance</div>
+                    <div class="metric-value">Rs. {net_balance:,.2f}</div>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        if not os.path.exists(DOCS_DIR):
+            os.makedirs(DOCS_DIR)
+        
+        with open(HTML_SUMMARY_FILE, "w") as f:
+            f.write(html_content)
+    except Exception as e:
+        st.error(f"An error occurred while generating the HTML summary: {e}")
+
+def update_balances_and_sidebar(payments_df, client_expenses_df):
+    """Calculates and displays financial metrics in the sidebar."""
+    st.sidebar.title("Financial Summary")
+    st.sidebar.markdown(f"**[GitHub Repo]({GITHUB_REPO_URL})**")
+    
+    st.sidebar.link_button("See Payments Summary", f"{GITHUB_REPO_URL}/tree/{GIT_BRANCH_NAME}/{DOCS_DIR}/index.html")
+
+    try:
+        payments_df['amount'] = pd.to_numeric(payments_df['amount'], errors='coerce').fillna(0)
+        client_expenses_df['amount'] = pd.to_numeric(client_expenses_df['amount'], errors='coerce').fillna(0)
+
+        total_received = payments_df[payments_df['type'] == 'i_received']['amount'].sum()
+        total_paid = payments_df[payments_df['type'] == 'i_paid']['amount'].sum()
+        total_client_expenses = client_expenses_df['amount'].sum()
+        net_balance = total_received - (total_paid + total_client_expenses)
+
+        st.sidebar.metric("Total Received", f"Rs. {total_received:,.2f}")
+        st.sidebar.metric("Total Paid (to clients)", f"Rs. {total_paid:,.2f}")
+        st.sidebar.metric("Total Client Expenses", f"Rs. {total_client_expenses:,.2f}")
+        st.sidebar.metric("Net Balance", f"Rs. {net_balance:,.2f}")
+
+    except Exception as e:
+        st.sidebar.error(f"Error loading balances: {str(e)}")
+
+# --- Tab-specific Functions ---
+def add_transaction_tab(payments_df, people_df):
+    """Logic for the 'Add Transaction' tab."""
+    st.header("Add New Transaction")
+    with st.form(key='add_transaction_form', clear_on_submit=st.session_state.reset_add_form):
         col1, col2 = st.columns(2)
         with col1:
-            st.session_state.add_client_expense_amount = st.number_input("Amount", min_value=0.01, format="%.2f", key="add_expense_amount_input", value=st.session_state.add_client_expense_amount)
+            st.session_state.add_date = st.date_input("Date", datetime.now().date(), key='add_date_input')
+            transaction_options = ['i_paid', 'i_received']
+            st.session_state.selected_transaction_type = st.radio("Transaction Type", transaction_options, key='add_type_input')
+            person_options = ['Select a person'] + people_df['name'].tolist()
+            st.session_state.selected_person = st.selectbox("Select Person", person_options, key='add_person_input')
+            payment_methods = ['cash', 'cheque', 'bank_transfer', 'online']
+            st.session_state.payment_method = st.selectbox("Payment Method", payment_methods, key='add_payment_method_input')
         with col2:
-            st.session_state.add_client_expense_date = st.date_input("Date", key="add_expense_date_input", value=st.session_state.add_client_expense_date)
-        
-        st.session_state.add_client_expense_category = st.text_input("Category", value=st.session_state.add_client_expense_category)
-        st.session_state.add_client_expense_quantity = st.number_input("Quantity", min_value=1, format="%d", value=st.session_state.add_client_expense_quantity or 1)
-        st.session_state.add_client_expense_description = st.text_area("Description", value=st.session_state.add_client_expense_description)
-
-        submitted_expense = st.form_submit_button("Add Client Expense")
-        if submitted_expense:
-            if st.session_state.selected_client_for_expense == 'Select a client':
-                st.error("Please select a client.")
-            elif st.session_state.add_client_expense_amount is None or st.session_state.add_client_expense_amount <= 0:
-                st.error("Please enter a valid amount.")
+            st.session_state.add_amount = st.number_input("Amount (Rs.)", min_value=0.0, format="%.2f", key='add_amount_input')
+            st.session_state.add_reference_number = st.text_input("Reference Number", key='add_ref_num_input')
+            if st.session_state.payment_method == 'cheque':
+                cheque_status_options = ['processing done', 'not deposited']
+                st.session_state.add_cheque_status = st.selectbox("Cheque Status", cheque_status_options, key='add_cheque_status_input')
             else:
-                if st.session_state.selected_client_for_expense not in people_df['name'].values:
-                    update_people_list(st.session_state.selected_client_for_expense)
-                    people_df = st.session_state.people_df
+                st.session_state.add_cheque_status = ''
+            status_options = ['completed', 'pending']
+            st.session_state.add_status = st.selectbox("Status", status_options, key='add_status_input')
+            st.session_state.add_description = st.text_area("Description", key='add_description_input')
 
-                new_expense_row = {
-                    'uuid': str(uuid.uuid4()),
+        submit_button = st.form_submit_button(label='Add Transaction')
+        
+        if submit_button:
+            if not st.session_state.add_amount or st.session_state.add_amount <= 0:
+                st.error("Please enter a valid amount.")
+            elif st.session_state.selected_person == 'Select a person':
+                st.error("Please select a person.")
+            else:
+                # Sanitize inputs
+                sanitized_ref_num = re.sub(r'[^a-zA-Z0-9\s-]', '', st.session_state.add_reference_number)
+                sanitized_desc = re.sub(r'[^a-zA-Z0-9\s-.]', '', st.session_state.add_description)
+
+                new_uuid = str(uuid.uuid4())
+                new_transaction = {
+                    'date': st.session_state.add_date.isoformat(),
+                    'person': st.session_state.selected_person,
+                    'amount': st.session_state.add_amount,
+                    'type': st.session_state.selected_transaction_type,
+                    'status': st.session_state.add_status,
+                    'description': sanitized_desc,
+                    'payment_method': st.session_state.payment_method,
+                    'reference_number': sanitized_ref_num,
+                    'cheque_status': st.session_state.add_cheque_status,
+                    'uuid': new_uuid
+                }
+                new_df = pd.DataFrame([new_transaction])
+                
+                # Backup before write
+                backup_file(CSV_FILE)
+                
+                payments_df = pd.concat([payments_df, new_df], ignore_index=True)
+                payments_df.to_csv(CSV_FILE, index=False)
+                st.success("Transaction added successfully!")
+                st.session_state.reset_add_form = True
+                push_to_git()
+                st.experimental_rerun()
+        else:
+            st.session_state.reset_add_form = False
+
+def view_transactions_tab(payments_df):
+    """Logic for the 'View Transactions' tab."""
+    st.header("View and Manage Transactions")
+    # Performance Note: Filtering is done client-side, which is efficient for
+    # small to medium datasets. For very large files, a database backend would be
+    # more appropriate.
+    with st.container():
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            person_filter_options = ['All'] + payments_df['person'].unique().tolist()
+            st.session_state.view_person_filter = st.selectbox("Filter by Person", person_filter_options, key='view_person_filter_input')
+        with col2:
+            st.session_state.view_payments_start_date = st.date_input("Start Date", value=st.session_state.view_payments_start_date, key='view_payments_start_date_input')
+        with col3:
+            st.session_state.view_payments_end_date = st.date_input("End Date", value=st.session_state.view_payments_end_date, key='view_payments_end_date_input')
+    
+    st.session_state.payment_ref_num_search = st.text_input("Search by Reference Number", key='payment_ref_num_search_input')
+
+    filtered_payments = payments_df.copy()
+    if st.session_state.view_person_filter != 'All':
+        filtered_payments = filtered_payments[filtered_payments['person'] == st.session_state.view_person_filter]
+    if st.session_state.payment_ref_num_search:
+        search_term = re.sub(r'[^a-zA-Z0-9\s-]', '', st.session_state.payment_ref_num_search)
+        filtered_payments = filtered_payments[filtered_payments['reference_number'].str.contains(search_term, case=False, na=False)]
+    
+    filtered_payments['date'] = pd.to_datetime(filtered_payments['date'])
+    start_date = pd.to_datetime(st.session_state.view_payments_start_date)
+    end_date = pd.to_datetime(st.session_state.view_payments_end_date)
+    filtered_payments = filtered_payments[
+        (filtered_payments['date'].dt.date >= start_date.date()) &
+        (filtered_payments['date'].dt.date <= end_date.date())
+    ]
+    
+    if not filtered_payments.empty:
+        st.dataframe(filtered_payments, use_container_width=True, hide_index=True)
+        payment_options = [''] + [
+            f"Date: {row['date'].strftime('%Y-%m-%d')} | Person: {row['person']} | Amount: {row['amount']:,.2f} | Ref: {row['reference_number']}"
+            for _, row in filtered_payments.iterrows()
+        ]
+        selected_option = st.selectbox("Select Transaction to Edit/Delete", payment_options, key='payment_selector')
+
+        if selected_option:
+            selected_row = filtered_payments.iloc[payment_options.index(selected_option) - 1]
+            index_to_edit = payments_df[payments_df['uuid'] == selected_row['uuid']].index[0]
+            st.subheader(f"Editing Transaction: {selected_row['uuid']}")
+            with st.form(key=f'edit_form'):
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.session_state.temp_edit_data = {}
+                    st.session_state.temp_edit_data['date'] = st.date_input("Date", pd.to_datetime(selected_row['date']).date(), key=f'edit_date')
+                    st.session_state.temp_edit_data['type'] = st.radio("Transaction Type", ['i_paid', 'i_received'], index=0 if selected_row['type'] == 'i_paid' else 1, key=f'edit_type')
+                with col2:
+                    st.session_state.temp_edit_data['amount'] = st.number_input("Amount", min_value=0.0, value=float(selected_row['amount']), format="%.2f", key=f'edit_amount')
+                    st.session_state.temp_edit_data['status'] = st.selectbox("Status", ['completed', 'pending'], index=0 if selected_row['status'] == 'completed' else 1, key=f'edit_status')
+                st.session_state.temp_edit_data['description'] = st.text_area("Description", value=selected_row['description'], key=f'edit_description')
+                
+                edit_col1, edit_col2 = st.columns(2)
+                with edit_col1:
+                    if st.form_submit_button("Save Changes"):
+                        for key, value in st.session_state.temp_edit_data.items():
+                            payments_df.loc[index_to_edit, key] = value
+                        backup_file(CSV_FILE)
+                        payments_df.to_csv(CSV_FILE, index=False)
+                        st.success("Transaction updated successfully!")
+                        push_to_git()
+                        st.experimental_rerun()
+                with edit_col2:
+                    if st.form_submit_button("Delete Transaction"):
+                        st.session_state.show_payment_delete_confirm = True
+                        st.session_state.payment_to_delete_uuid = selected_row['uuid']
+            
+            if st.session_state.show_payment_delete_confirm and st.session_state.payment_to_delete_uuid == selected_row['uuid']:
+                st.warning("Are you sure you want to delete this transaction? This action cannot be undone.")
+                if st.button("Confirm Deletion", key='confirm_delete_payment'):
+                    backup_file(CSV_FILE)
+                    payments_df.drop(index_to_edit, inplace=True)
+                    payments_df.to_csv(CSV_FILE, index=False)
+                    st.success("Transaction deleted successfully!")
+                    st.session_state.show_payment_delete_confirm = False
+                    st.session_state.payment_to_delete_uuid = None
+                    push_to_git()
+                    st.experimental_rerun()
+                if st.button("Cancel", key='cancel_delete_payment'):
+                    st.session_state.show_payment_delete_confirm = False
+                    st.session_state.payment_to_delete_uuid = None
+                    st.experimental_rerun()
+
+    else:
+        st.info("No payments found for the selected filters.")
+
+def client_expenses_tab(client_expenses_df, people_df):
+    """Logic for the 'Client Expenses' tab."""
+    st.header("Manage Client Expenses")
+    
+    # Add new client expense form
+    with st.form(key='add_client_expense_form_tab3', clear_on_submit=st.session_state.reset_client_expense_form):
+        st.subheader("Add New Client Expense")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.session_state.add_client_expense_date = st.date_input("Date", datetime.now().date(), key='add_client_expense_date_input_tab3')
+            client_options = ['Select a client'] + people_df[people_df['type'] == 'client']['name'].tolist()
+            st.session_state.selected_client_for_expense = st.selectbox("Select Client", client_options, key='add_client_expense_person_input_tab3')
+        with col2:
+            st.session_state.add_client_expense_amount = st.number_input("Amount (Rs.)", min_value=0.0, format="%.2f", key='add_client_expense_amount_input_tab3')
+            st.session_state.add_client_expense_quantity = st.number_input("Quantity", min_value=1.0, format="%f", key='add_client_expense_quantity_input_tab3')
+        
+        st.session_state.add_client_expense_category = st.text_input("Category", key='add_client_expense_category_input_tab3')
+        st.session_state.client_expense_ref_num_search = st.text_input("Reference Number (Optional)", key='add_client_expense_ref_num_input_tab3')
+        st.session_state.add_client_expense_description = st.text_area("Description", key='add_client_expense_description_input_tab3')
+        
+        submit_client_expense_button = st.form_submit_button(label='Add Client Expense')
+        
+        if submit_client_expense_button:
+            if not st.session_state.add_client_expense_amount or st.session_state.add_client_expense_amount <= 0:
+                st.error("Please enter a valid amount.")
+            elif st.session_state.selected_client_for_expense == 'Select a client':
+                st.error("Please select a client.")
+            else:
+                # Sanitize inputs
+                sanitized_ref_num = re.sub(r'[^a-zA-Z0-9\s-]', '', st.session_state.client_expense_ref_num_search)
+                sanitized_desc = re.sub(r'[^a-zA-Z0-9\s-.]', '', st.session_state.add_client_expense_description)
+
+                new_uuid = str(uuid.uuid4())
+                new_expense = {
+                    'reference_number': sanitized_ref_num,
+                    'date': st.session_state.add_client_expense_date.isoformat(),
                     'person': st.session_state.selected_client_for_expense,
-                    'date': st.session_state.add_client_expense_date.strftime('%Y-%m-%d'),
-                    'description': st.session_state.add_client_expense_description,
                     'category': st.session_state.add_client_expense_category,
                     'amount': st.session_state.add_client_expense_amount,
                     'quantity': st.session_state.add_client_expense_quantity,
-                    'reference_number': st.session_state.client_expense_ref_num_search
+                    'description': sanitized_desc,
+                    'uuid': new_uuid
                 }
+                new_df = pd.DataFrame([new_expense])
                 
-                st.session_state.client_expenses_df = pd.concat([st.session_state.client_expenses_df, pd.DataFrame([new_expense_row])], ignore_index=True)
-                st.session_state.client_expenses_df.to_csv(CLIENT_EXPENSES_FILE, index=False)
-                st.success("Successfully added client expense!")
+                # Backup before write
+                backup_file(CLIENT_EXPENSES_FILE)
+
+                client_expenses_df = pd.concat([client_expenses_df, new_df], ignore_index=True)
+                client_expenses_df.to_csv(CLIENT_EXPENSES_FILE, index=False)
+                st.success("Client expense added successfully!")
                 st.session_state.reset_client_expense_form = True
-                st.rerun()
-
-# --- Tab 4: View Client Expenses ---
-with tab4:
-    st.header("View and Edit Client Expenses")
-    st.info("Remember to click 'Save Client Expenses' to save any changes you make in the table.")
+                push_to_git()
+                st.experimental_rerun()
+        else:
+            st.session_state.reset_client_expense_form = False
     
-    filter_exp_col1, filter_exp_col2 = st.columns(2)
-    with filter_exp_col1:
-        filter_people_options = ['All'] + st.session_state.people_df['name'].tolist()
-        st.session_state.view_person_filter_client_expense = st.selectbox(
-            "Filter by Person",
-            options=filter_people_options,
-            index=filter_people_options.index(st.session_state.view_person_filter_client_expense) if st.session_state.view_person_filter_client_expense in filter_people_options else 0,
-            key='view_person_filter_client_expense_editor'
-        )
-    with filter_exp_col2:
-        st.session_state.client_expense_ref_num_search = st.text_input(
-            "Search by Reference Number",
-            value=st.session_state.client_expense_ref_num_search,
-            key='ref_num_search_client_expense'
-        )
-
-    filtered_client_expenses_df = client_expenses_df.copy()
+    # View and manage client expenses
+    st.subheader("View All Client Expenses")
+    with st.container():
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            client_expense_filter_options = ['All'] + client_expenses_df['person'].unique().tolist()
+            st.session_state.view_person_filter_client_expense = st.selectbox("Filter by Client", client_expense_filter_options, key='view_person_filter_client_expense_input')
+        with col2:
+            st.session_state.view_expenses_start_date = st.date_input("Start Date", value=st.session_state.view_expenses_start_date, key='view_expenses_start_date_input')
+        with col3:
+            st.session_state.view_expenses_end_date = st.date_input("End Date", value=st.session_state.view_expenses_end_date, key='view_expenses_end_date_input')
+    
+    st.session_state.client_expense_ref_num_search = st.text_input("Search by Reference Number", key='client_expense_ref_num_search_input_view')
+        
+    filtered_expenses = client_expenses_df.copy()
     if st.session_state.view_person_filter_client_expense != 'All':
-        filtered_client_expenses_df = filtered_client_expenses_df[filtered_client_expenses_df['person'] == st.session_state.view_person_filter_client_expense]
+        filtered_expenses = filtered_expenses[filtered_expenses['person'] == st.session_state.view_person_filter_client_expense]
     if st.session_state.client_expense_ref_num_search:
-        filtered_client_expenses_df = filtered_client_expenses_df[
-            filtered_client_expenses_df['reference_number'].str.contains(st.session_state.client_expense_ref_num_search, case=False, na=False)
+        search_term = re.sub(r'[^a-zA-Z0-9\s-]', '', st.session_state.client_expense_ref_num_search)
+        filtered_expenses = filtered_expenses[filtered_expenses['reference_number'].str.contains(search_term, case=False, na=False)]
+    
+    filtered_expenses['date'] = pd.to_datetime(filtered_expenses['date'])
+    start_date = pd.to_datetime(st.session_state.view_expenses_start_date)
+    end_date = pd.to_datetime(st.session_state.view_expenses_end_date)
+    filtered_expenses = filtered_expenses[
+        (filtered_expenses['date'].dt.date >= start_date.date()) &
+        (filtered_expenses['date'].dt.date <= end_date.date())
+    ]
+
+    if not filtered_expenses.empty:
+        st.dataframe(filtered_expenses, use_container_width=True, hide_index=True)
+        expense_options = [''] + [
+            f"Date: {row['date'].strftime('%Y-%m-%d')} | Person: {row['person']} | Amount: {row['amount']:,.2f} | Desc: {row['description']}"
+            for _, row in filtered_expenses.iterrows()
         ]
-        
-    if not filtered_client_expenses_df.empty:
-      filtered_client_expenses_df['date'] = pd.to_datetime(filtered_client_expenses_df['date'])
-      filtered_client_expenses_df = filtered_client_expenses_df.sort_values(by='date', ascending=False)
-      filtered_client_expenses_df['date'] = filtered_client_expenses_df['date'].dt.strftime('%Y-%m-%d')
-    
-    st.subheader("Client Expenses")
-    edited_client_expenses_df = st.data_editor(
-        filtered_client_expenses_df,
-        key='client_expenses_data_editor',
-        use_container_width=True,
-        num_rows="dynamic",
-        column_order=('person', 'date', 'description', 'category', 'amount', 'quantity', 'reference_number')
-    )
-    
-    if st.button("Save Client Expenses", key="save_client_expenses_button"):
-        st.session_state.client_expenses_df = edited_client_expenses_df
-        st.session_state.client_expenses_df.to_csv(CLIENT_EXPENSES_FILE, index=False)
-        git_push("Updated client expenses data.")
-        st.success("Client expenses updated and saved successfully!")
-        st.rerun()
+        selected_option = st.selectbox("Select Expense to Edit/Delete", expense_options, key='expense_selector')
 
-# --- Tab 5: Manage People (New Tab) ---
-with tab5:
-    st.header("Manage People")
-    st.subheader("Add New Person")
-    with st.form("add_person_form", clear_on_submit=True):
-        new_person_name = st.text_input("Name")
-        new_person_contact = st.text_input("Contact Details (Optional)")
-        new_person_type = st.radio("Type", ['Client', 'Vendor', 'Other'], horizontal=True)
-        if st.form_submit_button("Add Person"):
-            if new_person_name:
-                if new_person_name not in people_df['name'].values:
-                    new_person = pd.DataFrame([{'name': new_person_name, 'contact': new_person_contact, 'type': new_person_type}])
-                    st.session_state.people_df = pd.concat([st.session_state.people_df, new_person], ignore_index=True)
-                    st.session_state.people_df.to_csv(PEOPLE_FILE, index=False)
-                    st.success(f"Person '{new_person_name}' added successfully!")
-                    st.rerun()
-                else:
-                    st.error(f"A person with the name '{new_person_name}' already exists.")
-            else:
-                st.error("Please enter a name.")
-    
-    st.subheader("View and Edit People")
-    st.info("You can delete a person by selecting the row and pressing the 'Delete' key. Saving will also remove all associated payments and expenses for that person.")
-    
-    # Display the people table
-    edited_people_df = st.data_editor(
-        people_df,
-        key='people_data_editor',
-        use_container_width=True,
-        num_rows="dynamic",
-        column_order=('name', 'contact', 'type')
-    )
-    
-    if st.button("Save People", key="save_people_button"):
-        # Get the list of people who were in the old dataframe but are not in the new one
-        deleted_people = people_df[~people_df['name'].isin(edited_people_df['name'])]['name'].tolist()
-        
-        if deleted_people:
-            # Filter out all payments and client expenses for the deleted people
-            st.session_state.payments_df = st.session_state.payments_df[~st.session_state.payments_df['person'].isin(deleted_people)]
-            st.session_state.client_expenses_df = st.session_state.client_expenses_df[~st.session_state.client_expenses_df['person'].isin(deleted_people)]
+        if selected_option:
+            selected_row = filtered_expenses.iloc[expense_options.index(selected_option) - 1]
+            index_to_edit = client_expenses_df[client_expenses_df['uuid'] == selected_row['uuid']].index[0]
+            st.subheader(f"Editing Client Expense: {selected_row['uuid']}")
+            with st.form(key=f'edit_client_expense_form'):
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.session_state.temp_edit_client_expense_data = {}
+                    st.session_state.temp_edit_client_expense_data['date'] = st.date_input("Date", pd.to_datetime(selected_row['date']).date(), key=f'edit_client_expense_date')
+                    st.session_state.temp_edit_client_expense_data['category'] = st.text_input("Category", value=selected_row['category'], key=f'edit_client_expense_category')
+                with col2:
+                    st.session_state.temp_edit_client_expense_data['amount'] = st.number_input("Amount", min_value=0.0, value=float(selected_row['amount']), format="%.2f", key=f'edit_client_expense_amount')
+                    st.session_state.temp_edit_client_expense_data['quantity'] = st.number_input("Quantity", min_value=1.0, value=float(selected_row['quantity']), format="%f", key=f'edit_client_expense_quantity')
+                st.session_state.temp_edit_client_expense_data['description'] = st.text_area("Description", value=selected_row['description'], key=f'edit_client_expense_description')
+                
+                edit_col1, edit_col2 = st.columns(2)
+                with edit_col1:
+                    if st.form_submit_button("Save Changes"):
+                        for key, value in st.session_state.temp_edit_client_expense_data.items():
+                            client_expenses_df.loc[index_to_edit, key] = value
+                        backup_file(CLIENT_EXPENSES_FILE)
+                        client_expenses_df.to_csv(CLIENT_EXPENSES_FILE, index=False)
+                        st.success("Client expense updated successfully!")
+                        push_to_git()
+                        st.experimental_rerun()
+                with edit_col2:
+                    if st.form_submit_button("Delete Client Expense"):
+                        st.session_state.show_expense_delete_confirm = True
+                        st.session_state.expense_to_delete_uuid = selected_row['uuid']
             
-            # Save the updated payments and client expenses dataframes
-            st.session_state.payments_df.to_csv(CSV_FILE, index=False)
-            st.session_state.client_expenses_df.to_csv(CLIENT_EXPENSES_FILE, index=False)
-            st.warning(f"Deleted data for: {', '.join(deleted_people)}")
-
-        # Save the updated people list
-        st.session_state.people_df = edited_people_df
-        st.session_state.people_df.to_csv(PEOPLE_FILE, index=False)
-        
-        git_push("Updated people data and deleted associated records.")
-        st.success("People list and associated data updated and saved successfully!")
-        st.rerun()
-
-# --- Tab 6: Reports & Invoice ---
-with tab6:
-    st.header("Reports & Invoice")
-
-    total_received = payments_df[payments_df['type'] == 'Received']['amount'].sum()
-    total_paid = payments_df[payments_df['type'] == 'Paid']['amount'].sum()
-    net_balance = total_received - total_paid
-
-    st.subheader("Financial Summary")
-    
-    summary_cols = st.columns(3)
-    summary_cols[0].metric("Total Received", f"Rs. {total_received:,.2f}")
-    summary_cols[1].metric("Total Paid", f"Rs. {total_paid:,.2f}")
-    summary_cols[2].metric("Net Balance", f"Rs. {net_balance:,.2f}")
-
-    if not client_expenses_df.empty:
-        total_client_expenses = client_expenses_df['amount'].sum()
-        st.metric("Total Client Expenses", f"Rs. {total_client_expenses:,.2f}")
-        st.metric("Net Balance (Received - Spent)", f"Rs. {total_received - total_client_expenses:,.2f}")
-
-    st.subheader("Spending Overview by Client")
-    if not client_expenses_df.empty:
-        client_expenses_summary = client_expenses_df.groupby('person')['amount'].sum().sort_values(ascending=False)
-        st.bar_chart(client_expenses_summary)
-        st.write("Top spending clients:")
-        st.write(client_expenses_summary)
+            if st.session_state.show_expense_delete_confirm and st.session_state.expense_to_delete_uuid == selected_row['uuid']:
+                st.warning("Are you sure you want to delete this expense? This action cannot be undone.")
+                if st.button("Confirm Deletion", key='confirm_delete_expense'):
+                    backup_file(CLIENT_EXPENSES_FILE)
+                    client_expenses_df.drop(index_to_edit, inplace=True)
+                    client_expenses_df.to_csv(CLIENT_EXPENSES_FILE, index=False)
+                    st.success("Client expense deleted successfully!")
+                    st.session_state.show_expense_delete_confirm = False
+                    st.session_state.expense_to_delete_uuid = None
+                    push_to_git()
+                    st.experimental_rerun()
+                if st.button("Cancel", key='cancel_delete_expense'):
+                    st.session_state.show_expense_delete_confirm = False
+                    st.session_state.expense_to_delete_uuid = None
+                    st.experimental_rerun()
     else:
-        st.info("No client expenses to show.")
+        st.info("No client expenses found for the selected filters.")
 
-    st.subheader("Generate Invoice")
-    
-    with st.form("invoice_form"):
-        invoice_person_options = ['Select a client'] + people_df['name'].tolist()
-        st.session_state.invoice_person_name = st.selectbox(
-            "Select Person/Client",
-            options=invoice_person_options,
-            index=invoice_person_options.index(st.session_state.invoice_person_name) if st.session_state.invoice_person_name in invoice_person_options else 0
-        )
-        st.session_state.invoice_type = st.radio("Invoice Type", ['Payments', 'Client Expenses'], horizontal=True)
-
+def invoice_report_tab(payments_df, client_expenses_df, people_df):
+    """Logic for the 'Invoice/Report' tab."""
+    st.header("Generate Invoice / Report")
+    with st.form(key='generate_invoice_form'):
         col1, col2 = st.columns(2)
         with col1:
-            st.session_state.invoice_start_date = st.date_input("Start Date", value=st.session_state.invoice_start_date or datetime.now().date())
+            client_options = ['Select a client'] + people_df[people_df['type'] == 'client']['name'].tolist()
+            st.session_state.invoice_person_name = st.selectbox("Select Client", client_options, key='invoice_person_name_input')
         with col2:
-            st.session_state.invoice_end_date = st.date_input("End Date", value=st.session_state.invoice_end_date or datetime.now().date())
+            report_options_with_summary = {
+                'Bill': 'Bill (Client Expenses only)',
+                'Invoice': 'Invoice (Full Account Statement)',
+                'Inquiry': 'Inquiry (My Payments to Client)'
+            }
+            report_display_options = ['Select a report type'] + list(report_options_with_summary.values())
+            selected_report_display = st.selectbox("Select Report Type", report_display_options, key='report_type_input')
+            
+            st.session_state.report_type = next((key for key, value in report_options_with_summary.items() if value == selected_report_display), None)
+
+        use_date_range = st.checkbox("Use Date Range Filter", value=False, key='use_date_range_checkbox')
         
-        generate_button = st.form_submit_button("Generate Invoice PDF")
-        if generate_button:
-            if st.session_state.invoice_person_name == 'Select a client':
-                st.error("Please select a client to generate an invoice.")
+        if use_date_range:
+            col3, col4 = st.columns(2)
+            with col3:
+                st.session_state.invoice_start_date = st.date_input("Start Date", value=st.session_state.invoice_start_date or datetime.now().date(), key='invoice_start_date_input')
+            with col4:
+                st.session_state.invoice_end_date = st.date_input("End Date", value=st.session_state.invoice_end_date or datetime.now().date(), key='invoice_end_date_input')
+        
+        generate_button = st.form_submit_button("Generate Report")
+
+    if st.session_state.invoice_person_name != 'Select a client' and st.session_state.report_type is not None:
+        st.subheader("Report Preview")
+        temp_payments_df = payments_df.copy()
+        temp_expenses_df = client_expenses_df.copy()
+        
+        # Ensure date columns are datetime objects before filtering
+        temp_payments_df['date'] = pd.to_datetime(temp_payments_df['date'])
+        temp_expenses_df['date'] = pd.to_datetime(temp_expenses_df['date'])
+        
+        if use_date_range:
+            person_payments = temp_payments_df[(temp_payments_df['person'] == st.session_state.invoice_person_name) & (temp_payments_df['date'].dt.date >= st.session_state.invoice_start_date) & (temp_payments_df['date'].dt.date <= st.session_state.invoice_end_date)]
+            person_expenses = temp_expenses_df[(temp_expenses_df['person'] == st.session_state.invoice_person_name) & (temp_expenses_df['date'].dt.date >= st.session_state.invoice_start_date) & (temp_expenses_df['date'].dt.date <= st.session_state.invoice_end_date)]
+        else:
+            person_payments = temp_payments_df[temp_payments_df['person'] == st.session_state.invoice_person_name]
+            person_expenses = temp_expenses_df[temp_expenses_df['person'] == st.session_state.invoice_person_name]
+            
+        if st.session_state.report_type in ['Invoice', 'Inquiry']:
+            st.markdown("---")
+            st.subheader("Payments (I Paid to Client)")
+            if not person_payments.empty:
+                st.dataframe(person_payments, use_container_width=True, hide_index=True)
             else:
-                with st.spinner("Generating PDF..."):
-                    pdf_path = generate_invoice_pdf(
-                        st.session_state.invoice_person_name,
-                        st.session_state.invoice_type,
-                        st.session_state.invoice_start_date,
-                        st.session_state.invoice_end_date
-                    )
-                    st.session_state.generated_invoice_pdf_path = pdf_path
-                    st.session_state.show_download_button = True
-                    st.success("Invoice generated successfully!")
+                st.info("No payments found for this period.")
 
-    if st.session_state.show_download_button and st.session_state.generated_invoice_pdf_path:
-        with open(st.session_state.generated_invoice_pdf_path, "rb") as pdf_file:
-            st.download_button(
-                label="Download Invoice PDF",
-                data=pdf_file,
-                file_name=os.path.basename(st.session_state.generated_invoice_pdf_path),
-                mime="application/pdf"
-            )
+        if st.session_state.report_type in ['Invoice', 'Bill']:
+            st.markdown("---")
+            st.subheader("Client Expenses (Client Spent)")
+            if not person_expenses.empty:
+                st.dataframe(person_expenses, use_container_width=True, hide_index=True)
+            else:
+                st.info("No client expenses found for this period.")
 
-try:
-    current_payments_df = st.session_state.payments_df.copy()
-    if not current_payments_df.empty:
-      current_payments_df['reference_number'] = current_payments_df['reference_number'].apply(
-          lambda x: '' if pd.isna(x) or str(x).strip().lower() == 'nan' else str(x)
-      )
+        if st.session_state.report_type == 'Invoice':
+            st.markdown("---")
+            total_payments = person_payments['amount'].sum() if not person_payments.empty else 0
+            total_expenses = person_expenses['amount'].sum() if not person_expenses.empty else 0
+            net_balance = total_payments - total_expenses
+            st.subheader(f"Total Payments: Rs. {total_payments:,.2f}")
+            st.subheader(f"Total Client Expenses: Rs. {total_expenses:,.2f}")
+            st.subheader(f"Net Balance: Rs. {net_balance:,.2f}")
 
-      paid = current_payments_df[current_payments_df['type'] == 'Paid']['amount'].sum()
-      received = current_payments_df[current_payments_df['type'] == 'Received']['amount'].sum()
-    else:
-      paid = 0
-      received = 0
+    if generate_button:
+        if st.session_state.invoice_person_name == 'Select a client':
+            st.error("Please select a client to generate the report.")
+        elif st.session_state.report_type is None:
+            st.error("Please select a report type.")
+        else:
+            with st.spinner("Generating PDF..."):
+                pdf_data = generate_report_pdf(
+                    st.session_state.invoice_person_name,
+                    st.session_state.report_type,
+                    st.session_state.invoice_start_date,
+                    st.session_state.invoice_end_date,
+                    payments_df,
+                    client_expenses_df,
+                    use_date_range
+                )
+                
+                # Create directories if they don't exist
+                report_folder = os.path.join(REPORTS_DIR, st.session_state.report_type.lower())
+                if not os.path.exists(report_folder):
+                    os.makedirs(report_folder)
+                
+                # Save the file to the new folder structure
+                sanitized_person_name = sanitize_filename(st.session_state.invoice_person_name)
+                file_name = f"{st.session_state.report_type.lower()}_{sanitized_person_name}_{datetime.now().strftime('%Y%m%d%H%M%S')}.pdf"
+                file_path = os.path.join(report_folder, file_name)
+                with open(file_path, "wb") as f:
+                    f.write(pdf_data)
 
-    html_summary = f"""
-    <html>
-    <head>
-    <style>
-        body {{ font-family: sans-serif; }}
-        h3 {{ color: #004d40; }}
-        .metric {{
-            background-color: #e0f7fa;
-            border: 1px solid #00acc1;
-            border-radius: 5px;
-            padding: 10px;
-            margin-bottom: 10px;
-        }}
-    </style>
-    </head>
-    <body>
-        <h3>Financial Summary</h3>
-        <div class="metric">
-            <strong>Total Received:</strong> Rs. {received:,.2f}
-        </div>
-        <div class="metric">
-            <strong>Total Paid:</strong> Rs. {paid:,.2f}
-        </div>
-        <div class="metric">
-            <strong>Net Balance:</strong> Rs. {received - paid:,.2f}
-        </div>
-    </body>
-    </html>
-    """
+                st.session_state.generated_pdf_data = bytes(pdf_data)
+                st.session_state.generated_pdf_filename = file_name
+                st.success(f"Report generated and saved to '{file_path}'!")
+                push_to_git()
     
-    st.session_state.html_summary_content = html_summary
+    if st.session_state.generated_pdf_data:
+        st.download_button(
+            label=f"Download {st.session_state.report_type} PDF",
+            data=st.session_state.generated_pdf_data,
+            file_name=st.session_state.generated_pdf_filename,
+            mime="application/pdf",
+            key="download_button_final"
+        )
 
-except (FileNotFoundError, pd.errors.EmptyDataError):
-    st.session_state.html_summary_content = "<html><body><h3>Financial Summary</h3><p>No transactions found.</p></body></html>"
-except Exception as e:
-    st.session_state.html_summary_content = f"<html><body><h3>Financial Summary</h3><p>Error loading summary: {str(e)}</p></body></html>"
+# --- Main App ---
+def main():
+    """Main Streamlit application function."""
+    st.set_page_config(page_title="Payment & Expense Tracker", layout="wide")
+    st.title("Payment & Expense Tracker")
+
+    init_state()
+    
+    # Load dataframes once
+    payments_df = load_data(CSV_FILE, ['date', 'person', 'amount', 'type', 'status', 'description', 'payment_method', 'reference_number', 'cheque_status', 'uuid'])
+    people_df = load_people()
+    client_expenses_df = load_data(CLIENT_EXPENSES_FILE, ['reference_number', 'date', 'person', 'category', 'amount', 'quantity', 'description', 'uuid'])
+    
+    if payments_df is None or people_df is None or client_expenses_df is None:
+        st.error("Application could not start due to file errors.")
+        return
+
+    # Update HTML summary and sidebar on every run
+    generate_html_summary(payments_df, client_expenses_df)
+    update_balances_and_sidebar(payments_df, client_expenses_df)
+    
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### Git Status")
+    if 'commit_hash' in st.session_state and st.session_state.commit_hash:
+        st.sidebar.markdown(f"Latest Commit: `{st.session_state.commit_hash[:7]}`")
+
+    tab1, tab2, tab3, tab4 = st.tabs(["Add Transaction", "View Transactions", "Client Expenses", "Invoice/Report"])
+
+    with tab1:
+        add_transaction_tab(payments_df, people_df)
+
+    with tab2:
+        view_transactions_tab(payments_df)
+
+    with tab3:
+        client_expenses_tab(client_expenses_df, people_df)
+
+    with tab4:
+        invoice_report_tab(payments_df, client_expenses_df, people_df)
+
+if __name__ == "__main__":
+    main()
